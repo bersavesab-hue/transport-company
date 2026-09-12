@@ -11,7 +11,8 @@ const ERRORS: Record<string, string> = {
   VEHICLE_MODEL_UNAVAILABLE: "该车型当前不可购买", FEATURE_DISABLED: "该功能尚未开放", PARKING_FULL: "停车位已满，请先扩建停车场",
   REPUTATION_TOO_LOW: "公司声誉尚未达到该车型的购买要求", INSUFFICIENT_CASH: "现金不足", USED_OFFER_UNAVAILABLE: "该二手车源已经失效",
   VEHICLE_NOT_FOUND: "车辆不存在", LAST_VEHICLE: "必须至少保留一辆运营车辆", VEHICLE_BUSY: "车辆执行任务时不能出售",
-  LOAN_SETTLEMENT_UNAFFORDABLE: "出售收入不足以结清该车贷款"
+  LOAN_SETTLEMENT_UNAFFORDABLE: "出售收入不足以结清该车贷款", REPOSITION_INVALID: "只有空闲且未装货的车辆可以空驶调度",
+  CONTRACT_UNAVAILABLE: "该客户合同当前不可签订", CONTRACT_ALREADY_SIGNED: "该合同已经签订", CONTRACT_LIMIT: "当前最多同时经营两份大客户合同"
 };
 
 export class GameService {
@@ -34,7 +35,7 @@ export class GameService {
     const loads = vehicle.assignedOrderIds.map((id) => state.orders.find((item) => item.id === id)).filter(Boolean);
     if (!order || !model) return "订单或车辆状态不正确";
     if (order.originCityId !== vehicle.currentCityId) return "车辆不在订单起点";
-    if (loads.length && loads[0]?.destinationCityId !== order.destinationCityId) return "当前版本只能拼装同一目的地订单";
+    if (state.featureFlags.multiStopRouting === false && loads.length && loads[0]?.destinationCityId !== order.destinationCityId) return ERRORS.MULTI_STOP_NOT_ENABLED;
     if (loads.reduce((sum, item) => sum + (item?.weightKg ?? 0), 0) + order.weightKg > model.capacityKg || loads.reduce((sum, item) => sum + (item?.volumeLiters ?? 0), 0) + order.volumeLiters > model.capacityLiters) return "车辆载重或容积不足";
     const cargo = this.content.cargoTypes.find((item) => item.id === order.cargoId);
     if (cargo && !model.capabilities.includes(cargo.temperature)) return ERRORS.VEHICLE_CAPABILITY_MISMATCH;
@@ -51,6 +52,22 @@ export class GameService {
     const vehicle = state.vehicleUnits.find((item) => item.id === vehicleId) ?? state.vehicleUnits[0];
     const result = this.engine.dispatch({ type: "StartTrip", transportUnitId: vehicle.id });
     if (!result.ok) return ERRORS[result.errorCode ?? ""] ?? "发车失败";
+    this.persistAndNotify();
+    return null;
+  }
+
+  repositionVehicle(destinationCityId: string, vehicleId?: string): string | null {
+    const state = this.getState();
+    const vehicle = state.vehicleUnits.find((item) => item.id === vehicleId) ?? state.vehicleUnits[0];
+    const result = this.engine.dispatch({ type: "RepositionVehicle", transportUnitId: vehicle.id, destinationCityId });
+    if (!result.ok) return ERRORS[result.errorCode ?? ""] ?? "空驶调度失败";
+    this.persistAndNotify();
+    return null;
+  }
+
+  signCustomerContract(contractId: string): string | null {
+    const result = this.engine.dispatch({ type: "SignCustomerContract", contractId });
+    if (!result.ok) return ERRORS[result.errorCode ?? ""] ?? "签约失败";
     this.persistAndNotify();
     return null;
   }

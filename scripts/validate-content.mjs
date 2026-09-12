@@ -35,6 +35,7 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
   const vehicleModels = await readJson(resolve(packRoot, manifest.files.vehicleModels));
   const orders = await readJson(resolve(packRoot, manifest.files.orders));
   const marketEvents = await readJson(resolve(packRoot, manifest.files.marketEvents));
+  const customerContracts = await readJson(resolve(packRoot, manifest.files.customerContracts));
 
   const cityIds = ensureUniqueIds(cities, "城市");
   const routeIds = ensureUniqueIds(routes, "路线");
@@ -42,6 +43,7 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
   const vehicleIds = ensureUniqueIds(vehicleModels, "车辆型号");
   const orderIds = ensureUniqueIds(orders, "订单");
   const marketEventIds = ensureUniqueIds(marketEvents, "市场事件");
+  const contractIds = ensureUniqueIds(customerContracts, "客户合同");
 
   for (const city of cities) {
     assert(city.contentPackId === manifest.id, `${city.id}: 内容包归属错误`);
@@ -76,7 +78,15 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
     assert(Number.isInteger(event.durationSeconds) && event.durationSeconds > 0, `${event.id}: 持续时间无效`);
   }
 
-  checkedRecords += cityIds.size + routeIds.size + cargoIds.size + vehicleIds.size + orderIds.size + marketEventIds.size;
+  for (const contract of customerContracts) {
+    assert(cityIds.has(contract.originCityId) && cityIds.has(contract.destinationCityId), `${contract.id}: 合同城市不存在`);
+    assert(cargoIds.has(contract.cargoId), `${contract.id}: 合同货物不存在`);
+    assert(Number.isInteger(contract.signingFeeCents) && contract.signingFeeCents >= 0, `${contract.id}: 签约费用无效`);
+    assert(Number.isInteger(contract.rewardBonusBasisPoints) && contract.rewardBonusBasisPoints > 0, `${contract.id}: 合同加成无效`);
+    assert(Number.isInteger(contract.milestoneOrders) && contract.milestoneOrders > 0, `${contract.id}: 里程碑无效`);
+  }
+
+  checkedRecords += cityIds.size + routeIds.size + cargoIds.size + vehicleIds.size + orderIds.size + marketEventIds.size + contractIds.size;
   checkedPacks += 1;
 }
 

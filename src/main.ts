@@ -44,6 +44,10 @@ root.addEventListener("click", (event) => {
   if (unloadButton?.dataset.unloadOrder) { const error = service.unloadOrder(unloadButton.dataset.unloadOrder, context.selectedVehicleId ?? undefined); toast(error ?? "订单已撤下，可重新安排"); return; }
   if (target.closest("#smart-load")) { const error = service.smartLoad(context.selectedVehicleId ?? undefined); toast(error ?? "已生成当前城市收益更高的拼货方案"); return; }
   if (target.closest("#start-trip")) { const error = service.startTrip(context.selectedVehicleId ?? undefined); toast(error ?? "车辆已出发，地图将实时推进"); return; }
+  const reposition = target.closest<HTMLButtonElement>("[data-reposition-city]");
+  if (reposition?.dataset.repositionCity) { const error = service.repositionVehicle(reposition.dataset.repositionCity, context.selectedVehicleId ?? undefined); context.selectedCityId = null; toast(error ?? "车辆已开始空驶调度，成本和空驶里程将被记录"); return; }
+  const signContract = target.closest<HTMLButtonElement>("[data-sign-contract]");
+  if (signContract?.dataset.signContract) { const error = service.signCustomerContract(signContract.dataset.signContract); toast(error ?? "大客户合同已生效，匹配订单将自动获得加成"); return; }
   const buyNew = target.closest<HTMLButtonElement>("[data-buy-new]");
   if (buyNew?.dataset.buyNew) { const previous = service.getState().vehicleUnits.length; const error = service.purchaseNewVehicle(buyNew.dataset.buyNew); const current = service.getState(); if (!error && current.vehicleUnits.length > previous) context.selectedVehicleId = current.vehicleUnits.at(-1)?.id ?? context.selectedVehicleId; toast(error ?? "新车已交付，可在车队中独立调度"); return; }
   const buyUsed = target.closest<HTMLButtonElement>("[data-buy-used]");
@@ -56,3 +60,4 @@ root.addEventListener("click", (event) => {
 
 service.subscribe((state) => renderView(state, contentBundle, context));
 service.startClock();
+if ("serviceWorker" in navigator && import.meta.env.PROD) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js"));

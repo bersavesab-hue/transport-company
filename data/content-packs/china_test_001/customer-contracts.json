@@ -1,0 +1,6 @@
+[
+  {"id":"customer_contract_yufeng_001","customerName":"南阳裕丰商贸","title":"郑州家居常运协议","originCityId":"city_nanyang_001","destinationCityId":"city_zhengzhou_001","cargoId":"cargo_furniture_001","requiredReputationBasisPoints":5000,"signingFeeCents":180000,"rewardBonusBasisPoints":800,"milestoneOrders":6,"active":true},
+  {"id":"customer_contract_huaxing_001","customerName":"郑州华星电器","title":"电子设备区域配送","originCityId":"city_nanyang_001","destinationCityId":"city_zhengzhou_001","cargoId":"cargo_electronics_001","requiredReputationBasisPoints":5200,"signingFeeCents":260000,"rewardBonusBasisPoints":1000,"milestoneOrders":8,"active":true},
+  {"id":"customer_contract_jianghan_001","customerName":"江汉速运","title":"南阳武汉快运专线","originCityId":"city_nanyang_001","destinationCityId":"city_wuhan_001","cargoId":"cargo_express_001","requiredReputationBasisPoints":5400,"signingFeeCents":360000,"rewardBonusBasisPoints":1200,"milestoneOrders":10,"active":true},
+  {"id":"customer_contract_zhongyuan_fresh_001","customerName":"中原鲜配","title":"武汉合肥冷链协议","originCityId":"city_wuhan_001","destinationCityId":"city_hefei_001","cargoId":"cargo_fresh_food_001","requiredReputationBasisPoints":5800,"signingFeeCents":520000,"rewardBonusBasisPoints":1500,"milestoneOrders":12,"active":true}
+]

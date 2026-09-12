@@ -1,0 +1,13 @@
+{
+  "version": "0.1.0",
+  "policy": "final-assets-only",
+  "fallbackEnabled": true,
+  "groups": {
+    "brand": "assets/images/brand/",
+    "map": "assets/images/maps/",
+    "vehicles": "assets/images/vehicles/",
+    "cargo": "assets/images/cargo/",
+    "facilities": "assets/images/facilities/",
+    "portraits": "assets/images/portraits/"
+  }
+}

@@ -84,6 +84,8 @@
 - `smartDispatch`: 开启
 - `cityIntelligence`: 开启
 - `fleetExpansion`: 开启
+- `multiStopRouting`: 开启
+- `customerContracts`: 开启
 - `roadPassenger`: 数据接口开启、正式运营关闭
 - `rail`: 关闭
 - `shipping`: 关闭

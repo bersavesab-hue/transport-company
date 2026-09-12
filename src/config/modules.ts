@@ -17,7 +17,7 @@ export const GAME_MODULES: readonly GameModuleDefinition[] = [
   { id: "company", label: "公司经营", shortLabel: "公司", icon: "company", status: "active", group: "primary" },
   { id: "warehouse", label: "仓储网络", shortLabel: "仓库", icon: "warehouse", status: "reserved", group: "operation" },
   { id: "staff", label: "员工与司机", shortLabel: "员工", icon: "staff", status: "reserved", group: "operation" },
-  { id: "contracts", label: "大客户合同", shortLabel: "合同", icon: "contract", status: "reserved", group: "operation" },
+  { id: "contracts", label: "大客户合同", shortLabel: "合同", icon: "contract", status: "active", featureFlag: "customerContracts", group: "operation" },
   { id: "maintenance", label: "维修与配件", shortLabel: "维修", icon: "tools", status: "reserved", group: "operation" },
   { id: "dealership", label: "4S店", shortLabel: "4S店", icon: "store", status: "active", featureFlag: "dealership", group: "expansion" },
   { id: "used-vehicles", label: "二手车市场", shortLabel: "二手车", icon: "used", status: "active", featureFlag: "usedVehicleMarket", group: "expansion" },

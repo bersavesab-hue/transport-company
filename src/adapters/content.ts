@@ -4,6 +4,7 @@ import ordersSource from "../../data/content-packs/china_test_001/orders.sample.
 import routesSource from "../../data/content-packs/china_test_001/routes.json";
 import vehicleModelsSource from "../../data/content-packs/china_test_001/vehicle-models.json";
 import marketEventsSource from "../../data/content-packs/china_test_001/market-events.json";
+import customerContractsSource from "../../data/content-packs/china_test_001/customer-contracts.json";
 import type { ContentBundle } from "../core/domain/model.js";
 
 export const contentBundle: ContentBundle = {
@@ -12,5 +13,6 @@ export const contentBundle: ContentBundle = {
   cargoTypes: cargoTypesSource,
   vehicleModels: vehicleModelsSource,
   orderTemplates: ordersSource,
-  marketEvents: marketEventsSource
+  marketEvents: marketEventsSource,
+  customerContracts: customerContractsSource
 } as ContentBundle;

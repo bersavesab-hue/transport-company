@@ -21,6 +21,7 @@ describe("mobile views", () => {
     expect(html).toContain("市场快讯");
     expect(html).toContain("城市行情");
     expect(html).toContain("货运指数");
+    expect(html).toContain('data-reposition-city="city_zhengzhou_001"');
   });
 
   it("shows a profit preview after loading cargo", () => {
@@ -38,6 +39,17 @@ describe("mobile views", () => {
     expect(html).toContain("装入车辆");
   });
 
+  it("shows a multi-stop route and return radar", () => {
+    const html = render({ view: "map", selectedCityId: null, selectedVehicleId: null, marketFilter: "all" }, (engine) => {
+      for (const orderId of ["order_sample_001", "order_sample_002"]) {
+        engine.dispatch({ type: "AcceptOrder", orderId });
+        engine.dispatch({ type: "AssignTransportUnit", orderId, transportUnitId: "vehicle_unit_player_001" });
+      }
+    });
+    expect(html).toContain("开始 2 站配送");
+    expect(html).toContain("返程雷达");
+  });
+
   it("renders fleet expansion entry points", () => {
     const html = render({ view: "fleet", selectedCityId: null, selectedVehicleId: null, marketFilter: "all" });
     expect(html).toContain("我的车队");
@@ -51,5 +63,12 @@ describe("mobile views", () => {
     expect(dealer).toContain("厂家金融");
     expect(dealer).toContain("data-buy-new");
     expect(used).toContain("data-buy-used");
+  });
+
+  it("renders customer contracts from the content pack", () => {
+    const html = render({ view: "contracts", selectedCityId: null, selectedVehicleId: null, marketFilter: "all" });
+    expect(html).toContain("南阳裕丰商贸");
+    expect(html).toContain("data-sign-contract");
+    expect(html).toContain("运价 +8%");
   });
 });

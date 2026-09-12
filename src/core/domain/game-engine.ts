@@ -1,6 +1,7 @@
 import { CURRENT_SAVE_VERSION, GAME_VERSION, INITIAL_FEATURE_FLAGS } from "../version.js";
 import { getActiveMarketEvent, getMarketIndexBasisPoints, MARKET_PERIOD_SECONDS } from "./market-intelligence.js";
 import { estimateRoadCost, findDirectRoad, getAdjacentCities } from "./road-network.js";
+import { planMultiStopRoute, resolveRoadDestination } from "./route-planning.js";
 import { dealerDownPaymentCents, estimateVehicleResaleCents, parkingExpansionCostCents } from "./vehicle-economy.js";
 import type { CommandResult, ContentBundle, EngineCommand, GameEvent, GameState, MarketOrder, VehicleUnitState } from "./model.js";
 
@@ -17,7 +18,7 @@ export const createInitialState = (content: ContentBundle): GameState => ({
   gameVersion: GAME_VERSION,
   createdAt: new Date(0).toISOString(),
   updatedAt: new Date(0).toISOString(),
-  contentPacks: [{ id: "content_pack_china_test_001", version: "0.1.0" }],
+  contentPacks: [{ id: "content_pack_china_test_001", version: "0.2.0" }],
   featureFlags: { ...INITIAL_FEATURE_FLAGS },
   clock: { now: 8 * 3600, speed: 600, paused: false },
   company: {
@@ -27,7 +28,7 @@ export const createInitialState = (content: ContentBundle): GameState => ({
   },
   vehicleUnits: [{
     id: "vehicle_unit_player_001", modelId: "vehicle_model_light_truck_001", currentCityId: "city_nanyang_001",
-    status: "idle", conditionBasisPoints: 9_800, mileageMeters: 0, assignedOrderIds: [], trip: null,
+    status: "idle", conditionBasisPoints: 9_800, mileageMeters: 0, loadedDistanceMeters: 0, emptyDistanceMeters: 0, assignedOrderIds: [], trip: null,
     acquisitionSource: "starter", purchasePriceCents: 12_680_000, loanBalanceCents: 4_200_000,
     lifetimeRevenueCents: 0, lifetimeCostCents: 0
   }],
@@ -53,6 +54,7 @@ export const createInitialState = (content: ContentBundle): GameState => ({
     nextOfferSerial: 4,
     nextVehicleSerial: 2
   },
+  customerContracts: [],
   randomSeed: 260_912, nextOrderSerial: 9, nextEventSerial: 1, migrationHistory: []
 });
 
@@ -97,10 +99,29 @@ const migrateSaveV2ToV3 = (state: GameState, content: ContentBundle): void => {
   if (!state.migrationHistory.includes("save_v2_to_v3_fleet_assets")) state.migrationHistory.push("save_v2_to_v3_fleet_assets");
 };
 
+const migrateSaveV3ToV4 = (state: GameState): void => {
+  state.featureFlags.multiStopRouting = true;
+  state.featureFlags.customerContracts = true;
+  state.customerContracts = state.customerContracts ?? [];
+  const chinaPack = state.contentPacks.find((pack) => pack.id === "content_pack_china_test_001");
+  if (chinaPack) chinaPack.version = "0.2.0";
+  state.vehicleUnits.forEach((unit) => {
+    unit.loadedDistanceMeters = unit.loadedDistanceMeters ?? unit.mileageMeters;
+    unit.emptyDistanceMeters = unit.emptyDistanceMeters ?? 0;
+    if (!unit.trip) return;
+    unit.trip.routeIds = unit.trip.routeIds ?? [unit.trip.routeId];
+    unit.trip.routeIndex = unit.trip.routeIndex ?? 0;
+    unit.trip.finalCityId = unit.trip.finalCityId ?? unit.trip.toCityId;
+    unit.trip.purpose = unit.trip.purpose ?? "delivery";
+  });
+  if (!state.migrationHistory.includes("save_v3_to_v4_multi_stop_routes")) state.migrationHistory.push("save_v3_to_v4_multi_stop_routes");
+};
+
 const migrateState = (state: GameState, content: ContentBundle): void => {
   state.featureFlags = { ...INITIAL_FEATURE_FLAGS, ...state.featureFlags };
   if (state.saveVersion < 2 || !state.market) migrateSaveV1ToV2(state, content);
   if (state.saveVersion < 3 || !state.vehicleMarket) migrateSaveV2ToV3(state, content);
+  if (state.saveVersion < 4 || state.vehicleUnits.some((unit) => unit.trip && !unit.trip.routeIds)) migrateSaveV3ToV4(state);
   state.nextEventSerial = state.nextEventSerial ?? state.eventLog.length + 1;
   state.saveVersion = CURRENT_SAVE_VERSION;
   state.gameVersion = GAME_VERSION;
@@ -137,6 +158,8 @@ const createVehicleUnit = (state: GameState, modelId: string, source: "dealer" |
   status: "idle",
   conditionBasisPoints,
   mileageMeters,
+  loadedDistanceMeters: 0,
+  emptyDistanceMeters: 0,
   assignedOrderIds: [],
   trip: null,
   acquisitionSource: source,
@@ -255,7 +278,7 @@ export class GameEngine {
       if (!order || order.status !== "accepted" || !vehicle || !model) return { ok: false, errorCode: "ASSIGNMENT_INVALID", events };
       if (vehicle.status === "in_transit" || order.originCityId !== vehicle.currentCityId) return { ok: false, errorCode: "VEHICLE_NOT_AT_ORIGIN", events };
       const loads = assignedLoads(this.state, vehicle);
-      if (loads.length && loads[0].destinationCityId !== order.destinationCityId) return { ok: false, errorCode: "MULTI_STOP_NOT_ENABLED", events };
+      if (this.state.featureFlags.multiStopRouting === false && loads.length && loads[0].destinationCityId !== order.destinationCityId) return { ok: false, errorCode: "MULTI_STOP_NOT_ENABLED", events };
       const weight = loads.reduce((sum, item) => sum + item.weightKg, 0) + order.weightKg;
       const volume = loads.reduce((sum, item) => sum + item.volumeLiters, 0) + order.volumeLiters;
       if (weight > model.capacityKg || volume > model.capacityLiters) return { ok: false, errorCode: "CAPACITY_EXCEEDED", events };
@@ -280,19 +303,54 @@ export class GameEngine {
       const { vehicle, model } = getVehicleAndModel(this.state, this.content, command.transportUnitId);
       if (!vehicle || !model || !vehicle.assignedOrderIds.length || vehicle.trip) return { ok: false, errorCode: "TRIP_NOT_READY", events };
       const loads = assignedLoads(this.state, vehicle);
-      const destinationId = loads[0].destinationCityId;
-      const road = findDirectRoad(this.content, vehicle.currentCityId, destinationId);
-      if (!road) return { ok: false, errorCode: "NO_DIRECT_ROUTE", events };
+      const plan = planMultiStopRoute(this.content, vehicle.currentCityId, loads.map((order) => order.destinationCityId));
+      const road = plan ? this.content.routes.find((item) => item.id === plan.routeIds[0]) : undefined;
+      const destinationId = road ? resolveRoadDestination(road, vehicle.currentCityId) : null;
+      if (!plan || !road || !destinationId) return { ok: false, errorCode: "NO_DIRECT_ROUTE", events };
       loads.forEach((order) => { order.status = "in_transit"; });
       vehicle.status = "in_transit";
       vehicle.trip = {
-        routeId: road.id, fromCityId: vehicle.currentCityId, toCityId: destinationId,
+        routeId: road.id, routeIds: plan.routeIds, routeIndex: 0, finalCityId: plan.stopCityIds.at(-1)!,
+        purpose: "delivery",
+        fromCityId: vehicle.currentCityId, toCityId: destinationId,
         startedAt: this.state.clock.now, arrivesAt: this.state.clock.now + road.baseTravelSeconds,
         distanceMeters: road.distanceMeters, orderIds: [...vehicle.assignedOrderIds],
         projectedCostCents: estimateRoadCost(road, model.baseConsumption)
       };
       if (!this.state.activeRoutes.includes(road.id)) this.state.activeRoutes.push(road.id);
-      events.push(event(this.state, "TripStarted", "车辆已发车"));
+      events.push(event(this.state, "TripStarted", plan.stopCityIds.length > 1 ? `车辆已发车，计划配送 ${plan.stopCityIds.length} 个城市` : "车辆已发车"));
+    }
+
+    if (command.type === "RepositionVehicle") {
+      const { vehicle, model } = getVehicleAndModel(this.state, this.content, command.transportUnitId);
+      if (!vehicle || !model || vehicle.status !== "idle" || vehicle.assignedOrderIds.length || vehicle.currentCityId === command.destinationCityId) return { ok: false, errorCode: "REPOSITION_INVALID", events };
+      const plan = planMultiStopRoute(this.content, vehicle.currentCityId, [command.destinationCityId]);
+      const road = plan ? this.content.routes.find((item) => item.id === plan.routeIds[0]) : undefined;
+      const nextCityId = road ? resolveRoadDestination(road, vehicle.currentCityId) : null;
+      if (!plan || !road || !nextCityId) return { ok: false, errorCode: "NO_DIRECT_ROUTE", events };
+      vehicle.status = "in_transit";
+      vehicle.trip = {
+        routeId: road.id, routeIds: plan.routeIds, routeIndex: 0, finalCityId: command.destinationCityId,
+        purpose: "reposition", fromCityId: vehicle.currentCityId, toCityId: nextCityId,
+        startedAt: this.state.clock.now, arrivesAt: this.state.clock.now + road.baseTravelSeconds,
+        distanceMeters: road.distanceMeters, orderIds: [], projectedCostCents: estimateRoadCost(road, model.baseConsumption)
+      };
+      if (!this.state.activeRoutes.includes(road.id)) this.state.activeRoutes.push(road.id);
+      events.push(event(this.state, "VehicleRepositionStarted", `车辆开始空驶调往${this.content.cities.find((city) => city.id === command.destinationCityId)?.name ?? command.destinationCityId}`));
+    }
+
+    if (command.type === "SignCustomerContract") {
+      if (this.state.featureFlags.customerContracts === false) return { ok: false, errorCode: "FEATURE_DISABLED", events };
+      const definition = this.content.customerContracts.find((item) => item.id === command.contractId && item.active);
+      if (!definition) return { ok: false, errorCode: "CONTRACT_UNAVAILABLE", events };
+      if (this.state.customerContracts.some((item) => item.definitionId === definition.id)) return { ok: false, errorCode: "CONTRACT_ALREADY_SIGNED", events };
+      if (this.state.customerContracts.length >= 2) return { ok: false, errorCode: "CONTRACT_LIMIT", events };
+      if (this.state.company.reputationBasisPoints < definition.requiredReputationBasisPoints) return { ok: false, errorCode: "REPUTATION_TOO_LOW", events };
+      if (this.state.company.cashCents < definition.signingFeeCents) return { ok: false, errorCode: "INSUFFICIENT_CASH", events };
+      this.state.company.cashCents -= definition.signingFeeCents;
+      this.state.company.totalCostCents += definition.signingFeeCents;
+      this.state.customerContracts.push({ definitionId: definition.id, signedAt: this.state.clock.now, completedOrders: 0, earnedBonusCents: 0 });
+      events.push(event(this.state, "CustomerContractSigned", `已与${definition.customerName}签订${definition.title}`, -definition.signingFeeCents));
     }
 
     if (command.type === "PurchaseNewVehicle") {
@@ -358,29 +416,66 @@ export class GameEngine {
         if (order.status === "available" && order.deadlineAt <= this.state.clock.now) order.status = "cancelled";
       });
       for (const vehicle of this.state.vehicleUnits) {
-        if (!vehicle.trip || vehicle.trip.arrivesAt > this.state.clock.now) continue;
-        const trip = vehicle.trip;
-        const loads = assignedLoads(this.state, vehicle);
-        const revenue = loads.reduce((sum, order) => sum + (trip.arrivesAt <= order.deadlineAt ? order.rewardCents : Math.round(order.rewardCents * 0.65)), 0);
-        const onTime = loads.filter((order) => trip.arrivesAt <= order.deadlineAt).length;
-        loads.forEach((order) => { order.status = trip.arrivesAt <= order.deadlineAt ? "delivered" : "failed"; });
-        this.state.company.cashCents += revenue - trip.projectedCostCents;
-        this.state.company.totalRevenueCents += revenue;
-        this.state.company.totalCostCents += trip.projectedCostCents;
-        this.state.company.deliveredOrders += loads.length;
-        this.state.company.onTimeOrders += onTime;
-        this.state.company.reputationBasisPoints = Math.min(10_000, this.state.company.reputationBasisPoints + onTime * 25 + (loads.length - onTime) * 5);
-        vehicle.currentCityId = trip.toCityId;
-        vehicle.lifetimeRevenueCents += revenue;
-        vehicle.lifetimeCostCents += trip.projectedCostCents;
-        vehicle.mileageMeters += trip.distanceMeters;
-        vehicle.conditionBasisPoints = Math.max(0, vehicle.conditionBasisPoints - Math.round(trip.distanceMeters / 4_000));
-        vehicle.assignedOrderIds = [];
-        vehicle.status = "idle";
-        vehicle.trip = null;
-        this.state.activeRoutes = [...new Set(this.state.vehicleUnits.map((unit) => unit.trip?.routeId).filter((routeId): routeId is string => Boolean(routeId)))];
-        events.push(event(this.state, "DeliveryCompleted", `完成 ${loads.length} 单运输，净收入已入账`, revenue - trip.projectedCostCents));
+        const vehicleModel = this.content.vehicleModels.find((item) => item.id === vehicle.modelId);
+        if (!vehicleModel) continue;
+        while (vehicle.trip && vehicle.trip.arrivesAt <= this.state.clock.now) {
+          const trip = vehicle.trip;
+          vehicle.currentCityId = trip.toCityId;
+          const delivered = assignedLoads(this.state, vehicle).filter((order) => order.destinationCityId === vehicle.currentCityId);
+          let revenue = 0;
+          for (const order of delivered) {
+            const baseRevenue = trip.arrivesAt <= order.deadlineAt ? order.rewardCents : Math.round(order.rewardCents * 0.65);
+            const activeContract = this.state.customerContracts.find((contract) => {
+              const definition = this.content.customerContracts.find((item) => item.id === contract.definitionId);
+              return definition?.originCityId === order.originCityId && definition.destinationCityId === order.destinationCityId && definition.cargoId === order.cargoId;
+            });
+            const definition = activeContract ? this.content.customerContracts.find((item) => item.id === activeContract.definitionId) : undefined;
+            const bonus = definition ? Math.round(baseRevenue * definition.rewardBonusBasisPoints / 10_000) : 0;
+            revenue += baseRevenue + bonus;
+            if (activeContract && definition) {
+              activeContract.completedOrders += 1;
+              activeContract.earnedBonusCents += bonus;
+              if (activeContract.completedOrders === definition.milestoneOrders) events.push(event(this.state, "ContractMilestone", `${definition.customerName}合同达成首个里程碑`, bonus));
+            }
+          }
+          const onTime = delivered.filter((order) => trip.arrivesAt <= order.deadlineAt).length;
+          delivered.forEach((order) => { order.status = trip.arrivesAt <= order.deadlineAt ? "delivered" : "failed"; });
+          this.state.company.cashCents += revenue - trip.projectedCostCents;
+          this.state.company.totalRevenueCents += revenue;
+          this.state.company.totalCostCents += trip.projectedCostCents;
+          this.state.company.deliveredOrders += delivered.length;
+          this.state.company.onTimeOrders += onTime;
+          this.state.company.reputationBasisPoints = Math.min(10_000, this.state.company.reputationBasisPoints + onTime * 25 + (delivered.length - onTime) * 5);
+          vehicle.lifetimeRevenueCents += revenue;
+          vehicle.lifetimeCostCents += trip.projectedCostCents;
+          vehicle.mileageMeters += trip.distanceMeters;
+          if (trip.purpose === "delivery") vehicle.loadedDistanceMeters += trip.distanceMeters;
+          else vehicle.emptyDistanceMeters += trip.distanceMeters;
+          vehicle.conditionBasisPoints = Math.max(0, vehicle.conditionBasisPoints - Math.round(trip.distanceMeters / 4_000));
+          const deliveredIds = new Set(delivered.map((order) => order.id));
+          vehicle.assignedOrderIds = vehicle.assignedOrderIds.filter((id) => !deliveredIds.has(id));
+          if (delivered.length) events.push(event(this.state, "DeliveryCompleted", `抵达${this.content.cities.find((city) => city.id === vehicle.currentCityId)?.name ?? vehicle.currentCityId}，完成 ${delivered.length} 单`, revenue - trip.projectedCostCents));
+
+          const nextRouteIndex = trip.routeIndex + 1;
+          const nextRoad = nextRouteIndex < trip.routeIds.length ? this.content.routes.find((road) => road.id === trip.routeIds[nextRouteIndex]) : undefined;
+          const nextCityId = nextRoad ? resolveRoadDestination(nextRoad, vehicle.currentCityId) : null;
+          if (nextRoad && nextCityId && (trip.purpose === "reposition" || vehicle.assignedOrderIds.length)) {
+            vehicle.trip = {
+              ...trip, routeId: nextRoad.id, routeIndex: nextRouteIndex,
+              fromCityId: vehicle.currentCityId, toCityId: nextCityId,
+              startedAt: trip.arrivesAt, arrivesAt: trip.arrivesAt + nextRoad.baseTravelSeconds,
+              distanceMeters: nextRoad.distanceMeters, orderIds: [...vehicle.assignedOrderIds],
+              projectedCostCents: estimateRoadCost(nextRoad, vehicleModel.baseConsumption)
+            };
+          } else {
+            vehicle.assignedOrderIds = [];
+            vehicle.status = "idle";
+            vehicle.trip = null;
+            if (trip.purpose === "reposition") events.push(event(this.state, "VehicleRepositionCompleted", `空驶调度完成，车辆抵达${this.content.cities.find((city) => city.id === vehicle.currentCityId)?.name ?? vehicle.currentCityId}`, -trip.projectedCostCents));
+          }
+        }
       }
+      this.state.activeRoutes = [...new Set(this.state.vehicleUnits.map((unit) => unit.trip?.routeId).filter((routeId): routeId is string => Boolean(routeId)))];
     }
 
     if (command.type === "SetClock") {

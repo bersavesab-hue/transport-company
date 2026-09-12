@@ -19,5 +19,7 @@ describe("extension registries", () => {
     const cargoIds = new Set(contentBundle.cargoTypes.map((cargo) => cargo.id));
     expect(contentBundle.marketEvents).toHaveLength(8);
     expect(contentBundle.marketEvents.every((event) => cityIds.has(event.cityId) && cargoIds.has(event.cargoId))).toBe(true);
+    expect(contentBundle.customerContracts).toHaveLength(4);
+    expect(contentBundle.customerContracts.every((contract) => cityIds.has(contract.originCityId) && cityIds.has(contract.destinationCityId) && cargoIds.has(contract.cargoId))).toBe(true);
   });
 });

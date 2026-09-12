@@ -1,0 +1,14 @@
+{
+  "name": "运输纪元",
+  "short_name": "运输纪元",
+  "description": "公路运输公司模拟经营游戏",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1422",
+  "theme_color": "#101b2d",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "./assets/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

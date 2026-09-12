@@ -21,7 +21,9 @@ describe("GameEngine", () => {
   });
 
   it("rejects cargo above capacity", () => {
-    const engine = new GameEngine(contentBundle, createInitialState(contentBundle));
+    const initial = createInitialState(contentBundle);
+    initial.orders.find((order) => order.id === "order_sample_001")!.weightKg = 1_400;
+    const engine = new GameEngine(contentBundle, initial);
     const unitId = "vehicle_unit_player_001";
     engine.dispatch({ type: "AcceptOrder", orderId: "order_sample_002" });
     engine.dispatch({ type: "AssignTransportUnit", orderId: "order_sample_002", transportUnitId: unitId });
@@ -62,10 +64,11 @@ describe("GameEngine", () => {
     legacy.company.cashCents = 9_123_456;
     const engine = new GameEngine(contentBundle, legacy);
     const before = engine.snapshot();
-    expect(before.saveVersion).toBe(3);
+    expect(before.saveVersion).toBe(4);
     expect(before.company.cashCents).toBe(9_123_456);
     expect(before.migrationHistory).toContain("save_v1_to_v2_dynamic_market");
     expect(before.migrationHistory).toContain("save_v2_to_v3_fleet_assets");
+    expect(before.migrationHistory).toContain("save_v3_to_v4_multi_stop_routes");
     expect(before.vehicleUnits[0].loanBalanceCents).toBe(4_200_000);
     expect(before.featureFlags.dealership).toBe(true);
     expect(before.featureFlags.usedVehicleMarket).toBe(true);
@@ -131,5 +134,70 @@ describe("GameEngine", () => {
     expect(state.company.totalCostCents).toBeGreaterThan(0);
     expect(state.company.totalCostCents).toBeLessThan(10_000);
     expect(state.eventLog.some((item) => item.type === "VehicleFinancePaid")).toBe(true);
+  });
+
+  it("plans and settles different destinations as one multi-stop trip", () => {
+    const engine = new GameEngine(contentBundle, createInitialState(contentBundle));
+    const unitId = "vehicle_unit_player_001";
+    for (const orderId of ["order_sample_001", "order_sample_002", "order_sample_005"]) {
+      expect(engine.dispatch({ type: "AcceptOrder", orderId }).ok).toBe(true);
+      expect(engine.dispatch({ type: "AssignTransportUnit", orderId, transportUnitId: unitId }).ok).toBe(true);
+    }
+    expect(engine.dispatch({ type: "StartTrip", transportUnitId: unitId }).ok).toBe(true);
+    expect(engine.snapshot().vehicleUnits[0].trip?.routeIds.length).toBeGreaterThan(1);
+    engine.dispatch({ type: "AdvanceTime", elapsedGameSeconds: 40_000 });
+    const state = engine.snapshot();
+    expect(state.company.deliveredOrders).toBe(3);
+    expect(state.vehicleUnits[0].currentCityId).toBe("city_wuhan_001");
+    expect(state.vehicleUnits[0].status).toBe("idle");
+    expect(state.activeRoutes).toHaveLength(0);
+  });
+
+  it("repositions an empty vehicle through indirect roads and records empty mileage", () => {
+    const engine = new GameEngine(contentBundle, createInitialState(contentBundle));
+    const cashBefore = engine.snapshot().company.cashCents;
+    expect(engine.dispatch({ type: "RepositionVehicle", transportUnitId: "vehicle_unit_player_001", destinationCityId: "city_hefei_001" }).ok).toBe(true);
+    expect(engine.snapshot().vehicleUnits[0].trip?.routeIds).toHaveLength(2);
+    engine.dispatch({ type: "AdvanceTime", elapsedGameSeconds: 40_000 });
+    const state = engine.snapshot();
+    expect(state.vehicleUnits[0].currentCityId).toBe("city_hefei_001");
+    expect(state.vehicleUnits[0].emptyDistanceMeters).toBe(765_000);
+    expect(state.vehicleUnits[0].loadedDistanceMeters).toBe(0);
+    expect(state.company.cashCents).toBeLessThan(cashBefore);
+  });
+
+  it("keeps a version-three in-transit vehicle intact during route migration", () => {
+    const source = new GameEngine(contentBundle, createInitialState(contentBundle));
+    source.dispatch({ type: "AcceptOrder", orderId: "order_sample_001" });
+    source.dispatch({ type: "AssignTransportUnit", orderId: "order_sample_001", transportUnitId: "vehicle_unit_player_001" });
+    source.dispatch({ type: "StartTrip", transportUnitId: "vehicle_unit_player_001" });
+    const legacy = source.snapshot() as ReturnType<typeof createInitialState>;
+    legacy.saveVersion = 3;
+    const unit = legacy.vehicleUnits[0] as Partial<(typeof legacy.vehicleUnits)[number]>;
+    delete unit.loadedDistanceMeters;
+    delete unit.emptyDistanceMeters;
+    const trip = unit.trip as Partial<NonNullable<(typeof legacy.vehicleUnits)[number]["trip"]>>;
+    delete trip.routeIds;
+    delete trip.routeIndex;
+    delete trip.finalCityId;
+    delete trip.purpose;
+    const migrated = new GameEngine(contentBundle, legacy).snapshot();
+    expect(migrated.vehicleUnits[0].trip?.routeIds).toEqual(["route_nanyang_zhengzhou_001"]);
+    expect(migrated.vehicleUnits[0].trip?.purpose).toBe("delivery");
+    expect(migrated.vehicleUnits[0].assignedOrderIds).toEqual(["order_sample_001"]);
+    expect(migrated.migrationHistory).toContain("save_v3_to_v4_multi_stop_routes");
+  });
+
+  it("applies a signed customer contract bonus only to matching deliveries", () => {
+    const engine = new GameEngine(contentBundle, createInitialState(contentBundle));
+    expect(engine.dispatch({ type: "SignCustomerContract", contractId: "customer_contract_yufeng_001" }).ok).toBe(true);
+    engine.dispatch({ type: "AcceptOrder", orderId: "order_sample_005" });
+    engine.dispatch({ type: "AssignTransportUnit", orderId: "order_sample_005", transportUnitId: "vehicle_unit_player_001" });
+    engine.dispatch({ type: "StartTrip", transportUnitId: "vehicle_unit_player_001" });
+    engine.dispatch({ type: "AdvanceTime", elapsedGameSeconds: 20_000 });
+    const contract = engine.snapshot().customerContracts[0];
+    expect(contract.completedOrders).toBe(1);
+    expect(contract.earnedBonusCents).toBe(15_680);
+    expect(engine.dispatch({ type: "SignCustomerContract", contractId: "customer_contract_yufeng_001" }).errorCode).toBe("CONTRACT_ALREADY_SIGNED");
   });
 });
