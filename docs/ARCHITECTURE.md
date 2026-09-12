@@ -83,14 +83,15 @@
 - `dynamicMarket`: 开启
 - `smartDispatch`: 开启
 - `cityIntelligence`: 开启
+- `fleetExpansion`: 开启
 - `roadPassenger`: 数据接口开启、正式运营关闭
 - `rail`: 关闭
 - `shipping`: 关闭
 - `aviation`: 关闭
 - `internationalMap`: 关闭
 - `npcCompetition`: 关闭
-- `dealership`: 关闭
-- `usedVehicleMarket`: 关闭
+- `dealership`: 开启
+- `usedVehicleMarket`: 开启
 
 ## 性能边界
 

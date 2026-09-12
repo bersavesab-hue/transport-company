@@ -17,14 +17,14 @@ describe("mobile views", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("shows dynamic news and city intelligence on the map", () => {
-    const html = render({ view: "map", selectedCityId: "city_zhengzhou_001", marketFilter: "all" });
+    const html = render({ view: "map", selectedCityId: "city_zhengzhou_001", selectedVehicleId: null, marketFilter: "all" });
     expect(html).toContain("市场快讯");
     expect(html).toContain("城市行情");
     expect(html).toContain("货运指数");
   });
 
   it("shows a profit preview after loading cargo", () => {
-    const html = render({ view: "map", selectedCityId: null, marketFilter: "all" }, (engine) => {
+    const html = render({ view: "map", selectedCityId: null, selectedVehicleId: null, marketFilter: "all" }, (engine) => {
       engine.dispatch({ type: "AcceptOrder", orderId: "order_sample_001" });
       engine.dispatch({ type: "AssignTransportUnit", orderId: "order_sample_001", transportUnitId: "vehicle_unit_player_001" });
     });
@@ -33,8 +33,23 @@ describe("mobile views", () => {
   });
 
   it("renders working local-market filters", () => {
-    const html = render({ view: "market", selectedCityId: null, marketFilter: "local" });
+    const html = render({ view: "market", selectedCityId: null, selectedVehicleId: null, marketFilter: "local" });
     expect(html).toContain('data-market-filter="local" class="active"');
     expect(html).toContain("装入车辆");
+  });
+
+  it("renders fleet expansion entry points", () => {
+    const html = render({ view: "fleet", selectedCityId: null, selectedVehicleId: null, marketFilter: "all" });
+    expect(html).toContain("我的车队");
+    expect(html).toContain('data-view-jump="dealership"');
+    expect(html).toContain("至少保留一辆");
+  });
+
+  it("renders data-driven dealer and used vehicle offers", () => {
+    const dealer = render({ view: "dealership", selectedCityId: null, selectedVehicleId: null, marketFilter: "all" });
+    const used = render({ view: "used-vehicles", selectedCityId: null, selectedVehicleId: null, marketFilter: "all" });
+    expect(dealer).toContain("厂家金融");
+    expect(dealer).toContain("data-buy-new");
+    expect(used).toContain("data-buy-used");
   });
 });

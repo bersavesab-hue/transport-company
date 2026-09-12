@@ -42,7 +42,9 @@ export const findBestAdditionalLoad = (state: Readonly<GameState>, content: Cont
   const existing = loadedOrders(state, vehicle);
   const fixedDestination = existing[0]?.destinationCityId;
   const candidates = state.orders.filter((order) =>
-    order.status === "available" && order.originCityId === vehicle.currentCityId && (!fixedDestination || order.destinationCityId === fixedDestination)
+    order.status === "available" && order.originCityId === vehicle.currentCityId &&
+    model.capabilities.includes(content.cargoTypes.find((cargo) => cargo.id === order.cargoId)?.temperature ?? "ambient") &&
+    (!fixedDestination || order.destinationCityId === fixedDestination)
   );
   let bestIds: string[] = [];
   let bestScore = Number.NEGATIVE_INFINITY;

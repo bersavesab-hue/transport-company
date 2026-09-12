@@ -57,6 +57,8 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
   for (const vehicle of vehicleModels) {
     assert(vehicle.contentPackId === manifest.id, `${vehicle.id}: 内容包归属错误`);
     assert(Number.isInteger(vehicle.purchasePriceCents) && vehicle.purchasePriceCents >= 0, `${vehicle.id}: 价格无效`);
+    assert(Array.isArray(vehicle.capabilities) && vehicle.capabilities.length > 0, `${vehicle.id}: 缺少运载能力`);
+    assert(Number.isInteger(vehicle.requiredReputationBasisPoints) && vehicle.requiredReputationBasisPoints >= 0, `${vehicle.id}: 声誉门槛无效`);
   }
 
   for (const order of orders) {
