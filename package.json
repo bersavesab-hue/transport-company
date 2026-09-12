@@ -1,12 +1,21 @@
 {
   "name": "transport-company-foundation",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "validate": "node scripts/validate-content.mjs"
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "validate": "node scripts/validate-content.mjs",
+    "check": "npm run validate && npm run test && npm run build"
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.5"
   }
 }

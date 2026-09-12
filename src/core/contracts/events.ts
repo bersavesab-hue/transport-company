@@ -27,7 +27,19 @@ export interface PlanRouteCommand {
   cityIds: EntityId[];
 }
 
+export interface StartTripCommand {
+  type: "StartTrip";
+  transportUnitId: EntityId;
+}
+
+export interface AdvanceTimeCommand {
+  type: "AdvanceTime";
+  elapsedGameSeconds: GameSeconds;
+}
+
 export type GameCommand =
   | AcceptOrderCommand
   | AssignTransportUnitCommand
-  | PlanRouteCommand;
+  | PlanRouteCommand
+  | StartTripCommand
+  | AdvanceTimeCommand;

@@ -1,11 +1,15 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "strict": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "vitest/globals"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "vite.config.ts"]
 }
