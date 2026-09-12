@@ -1,11 +1,13 @@
 import { BrowserSaveRepository } from "../adapters/save-repository.js";
 import { createInitialState, GameEngine } from "../core/domain/game-engine.js";
+import { findBestAdditionalLoad } from "../core/domain/dispatch-intelligence.js";
 import type { ContentBundle, GameState } from "../core/domain/model.js";
 
 const ERRORS: Record<string, string> = {
   ORDER_NOT_AVAILABLE: "订单已经失效", ASSIGNMENT_INVALID: "订单或车辆状态不正确",
   VEHICLE_NOT_AT_ORIGIN: "车辆不在订单起点", MULTI_STOP_NOT_ENABLED: "当前版本只能拼装同一目的地订单",
-  CAPACITY_EXCEEDED: "车辆载重或容积不足", TRIP_NOT_READY: "车辆尚未完成装载", NO_DIRECT_ROUTE: "当前没有可用直达道路"
+  CAPACITY_EXCEEDED: "车辆载重或容积不足", TRIP_NOT_READY: "车辆尚未完成装载", NO_DIRECT_ROUTE: "当前没有可用直达道路",
+  UNASSIGNMENT_INVALID: "当前订单无法撤下"
 };
 
 export class GameService {
@@ -44,6 +46,35 @@ export class GameService {
     if (!result.ok) return ERRORS[result.errorCode ?? ""] ?? "发车失败";
     this.persistAndNotify();
     return null;
+  }
+
+  smartLoad(): string | null {
+    const state = this.getState();
+    if (state.featureFlags.smartDispatch === false) return "智能调度功能当前未开放";
+    const vehicle = state.vehicleUnits[0];
+    const orderIds = findBestAdditionalLoad(state, this.content, vehicle);
+    if (!orderIds.length) return "当前城市没有可组成盈利方案的货源";
+    for (const orderId of orderIds) {
+      const accepted = this.engine.dispatch({ type: "AcceptOrder", orderId });
+      if (!accepted.ok) return ERRORS[accepted.errorCode ?? ""] ?? "智能拼货失败";
+      const assigned = this.engine.dispatch({ type: "AssignTransportUnit", orderId, transportUnitId: vehicle.id });
+      if (!assigned.ok) return ERRORS[assigned.errorCode ?? ""] ?? "智能拼货失败";
+    }
+    this.persistAndNotify();
+    return null;
+  }
+
+  unloadOrder(orderId: string): string | null {
+    const vehicle = this.getState().vehicleUnits[0];
+    const result = this.engine.dispatch({ type: "UnassignTransportUnit", orderId, transportUnitId: vehicle.id });
+    if (!result.ok) return ERRORS[result.errorCode ?? ""] ?? "撤下失败";
+    this.persistAndNotify();
+    return null;
+  }
+
+  setClock(speed: number, paused: boolean): void {
+    this.engine.dispatch({ type: "SetClock", speed, paused });
+    this.persistAndNotify();
   }
 
   startClock(): void {

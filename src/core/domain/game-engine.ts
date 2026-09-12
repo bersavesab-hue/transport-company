@@ -1,5 +1,5 @@
-import { GAME_VERSION } from "../version.js";
-import { INITIAL_FEATURE_FLAGS } from "../version.js";
+import { CURRENT_SAVE_VERSION, GAME_VERSION, INITIAL_FEATURE_FLAGS } from "../version.js";
+import { getActiveMarketEvent, getMarketIndexBasisPoints, MARKET_PERIOD_SECONDS } from "./market-intelligence.js";
 import { estimateRoadCost, findDirectRoad, getAdjacentCities } from "./road-network.js";
 import type { CommandResult, ContentBundle, EngineCommand, GameEvent, GameState, MarketOrder, VehicleUnitState } from "./model.js";
 
@@ -12,7 +12,7 @@ const event = (state: GameState, type: string, message: string, amountCents?: nu
 });
 
 export const createInitialState = (content: ContentBundle): GameState => ({
-  saveVersion: 1,
+  saveVersion: CURRENT_SAVE_VERSION,
   gameVersion: GAME_VERSION,
   createdAt: new Date(0).toISOString(),
   updatedAt: new Date(0).toISOString(),
@@ -29,7 +29,14 @@ export const createInitialState = (content: ContentBundle): GameState => ({
     status: "idle", conditionBasisPoints: 9_800, mileageMeters: 0, assignedOrderIds: [], trip: null
   }],
   orders: content.orderTemplates.map((order) => ({ ...order, availableAt: 8 * 3600 + order.availableAt, deadlineAt: 8 * 3600 + order.deadlineAt })),
-  activeRoutes: [], eventLog: [], randomSeed: 260_912, nextOrderSerial: 9, migrationHistory: []
+  activeRoutes: [], eventLog: [],
+  market: {
+    periodIndex: Math.floor(8 * 3600 / MARKET_PERIOD_SECONDS),
+    activeEventId: content.marketEvents.find((item) => item.active)?.id ?? null,
+    startedAt: Math.floor(8 * 3600 / MARKET_PERIOD_SECONDS) * MARKET_PERIOD_SECONDS,
+    endsAt: (Math.floor(8 * 3600 / MARKET_PERIOD_SECONDS) + 1) * MARKET_PERIOD_SECONDS
+  },
+  randomSeed: 260_912, nextOrderSerial: 9, migrationHistory: []
 });
 
 const nextRandom = (state: GameState): number => {
@@ -37,21 +44,66 @@ const nextRandom = (state: GameState): number => {
   return state.randomSeed / 4_294_967_296;
 };
 
+const migrateSaveV1ToV2 = (state: GameState, content: ContentBundle): void => {
+  const periodIndex = Math.floor(state.clock.now / MARKET_PERIOD_SECONDS);
+  state.market = {
+    periodIndex,
+    activeEventId: content.marketEvents.find((item) => item.active)?.id ?? null,
+    startedAt: periodIndex * MARKET_PERIOD_SECONDS,
+    endsAt: (periodIndex + 1) * MARKET_PERIOD_SECONDS
+  };
+  if (!state.migrationHistory.includes("save_v1_to_v2_dynamic_market")) state.migrationHistory.push("save_v1_to_v2_dynamic_market");
+};
+
+const migrateState = (state: GameState, content: ContentBundle): void => {
+  state.featureFlags = { ...INITIAL_FEATURE_FLAGS, ...state.featureFlags };
+  if (state.saveVersion < 2 || !state.market) migrateSaveV1ToV2(state, content);
+  state.saveVersion = CURRENT_SAVE_VERSION;
+  state.gameVersion = GAME_VERSION;
+};
+
+const refreshMarketPeriod = (state: GameState, content: ContentBundle): GameEvent | null => {
+  if (state.featureFlags.dynamicMarket === false) return null;
+  const periodIndex = Math.floor(state.clock.now / MARKET_PERIOD_SECONDS);
+  if (periodIndex === state.market.periodIndex && state.clock.now < state.market.endsAt) return null;
+  const activeEvents = content.marketEvents.filter((item) => item.active);
+  const selected = activeEvents[Math.floor(nextRandom(state) * activeEvents.length)];
+  state.market = {
+    periodIndex,
+    activeEventId: selected?.id ?? null,
+    startedAt: state.clock.now,
+    endsAt: state.clock.now + (selected?.durationSeconds ?? MARKET_PERIOD_SECONDS)
+  };
+  return selected ? event(state, "MarketShift", selected.headline) : null;
+};
+
 const replenishMarket = (state: GameState, content: ContentBundle): void => {
   while (state.orders.filter((order) => order.status === "available").length < MARKET_TARGET) {
-    const origin = content.cities[Math.floor(nextRandom(state) * content.cities.length)];
+    const activeEvent = getActiveMarketEvent(state, content);
+    const eventAdjacent = activeEvent ? getAdjacentCities(content, activeEvent.cityId) : [];
+    const followEvent = Boolean(activeEvent && eventAdjacent.length && nextRandom(state) < 0.55);
+    const randomOrigin = content.cities[Math.floor(nextRandom(state) * content.cities.length)];
+    const origin = followEvent
+      ? content.cities.find((city) => city.id === eventAdjacent[Math.floor(nextRandom(state) * eventAdjacent.length)]) ?? randomOrigin
+      : randomOrigin;
     const adjacent = getAdjacentCities(content, origin.id);
-    const destinationId = adjacent[Math.floor(nextRandom(state) * adjacent.length)];
-    const cargo = content.cargoTypes[Math.floor(nextRandom(state) * content.cargoTypes.length)];
+    const destinationId = followEvent && activeEvent ? activeEvent.cityId : adjacent[Math.floor(nextRandom(state) * adjacent.length)];
+    const cargo = followEvent && activeEvent
+      ? content.cargoTypes.find((item) => item.id === activeEvent.cargoId)!
+      : content.cargoTypes[Math.floor(nextRandom(state) * content.cargoTypes.length)];
     const road = findDirectRoad(content, origin.id, destinationId);
     if (!road) continue;
     const weightKg = 420 + Math.floor(nextRandom(state) * 850);
     const volumeLiters = 1_800 + Math.floor(nextRandom(state) * 5_800);
+    const operatingCost = estimateRoadCost(road, content.vehicleModels[0].baseConsumption);
+    const marketIndex = getMarketIndexBasisPoints(state, content, destinationId, cargo.id);
+    const cargoPremium = cargo.temperature === "chilled" ? 24_000 : cargo.fragility * 260;
+    const baseReward = operatingCost + 48_000 + Math.round(road.distanceMeters * 0.34) + weightKg * 28 + volumeLiters * 3 + cargoPremium;
     state.orders.push({
       id: `order_market_${String(state.nextOrderSerial++).padStart(5, "0")}`,
       cargoId: cargo.id, originCityId: origin.id, destinationCityId: destinationId, weightKg, volumeLiters,
-      rewardCents: Math.round(90_000 + road.distanceMeters / 2.1 + weightKg * 42 + nextRandom(state) * 55_000),
-      availableAt: state.clock.now, deadlineAt: state.clock.now + road.baseTravelSeconds + 18_000, status: "available"
+      rewardCents: Math.round(baseReward * marketIndex / 10_000 + nextRandom(state) * 24_000),
+      availableAt: state.clock.now, deadlineAt: state.clock.now + road.baseTravelSeconds + 10_800 + Math.floor(nextRandom(state) * 14_400), status: "available"
     });
   }
 };
@@ -72,6 +124,7 @@ const assignedLoads = (state: GameState, vehicle: VehicleUnitState): MarketOrder
 
 export class GameEngine {
   constructor(private readonly content: ContentBundle, private readonly state: GameState) {
+    migrateState(this.state, this.content);
     replenishMarket(this.state, this.content);
   }
 
@@ -101,6 +154,16 @@ export class GameEngine {
       events.push(event(this.state, "CargoLoaded", "货物已装车"));
     }
 
+    if (command.type === "UnassignTransportUnit") {
+      const order = this.state.orders.find((item) => item.id === command.orderId);
+      const { vehicle } = getVehicleAndModel(this.state, this.content, command.transportUnitId);
+      if (!order || !vehicle || vehicle.trip || !vehicle.assignedOrderIds.includes(order.id)) return { ok: false, errorCode: "UNASSIGNMENT_INVALID", events };
+      vehicle.assignedOrderIds = vehicle.assignedOrderIds.filter((id) => id !== order.id);
+      order.status = "available";
+      vehicle.status = vehicle.assignedOrderIds.length ? "loading" : "idle";
+      events.push(event(this.state, "CargoUnloaded", "订单已从本车撤下"));
+    }
+
     if (command.type === "StartTrip") {
       const { vehicle, model } = getVehicleAndModel(this.state, this.content, command.transportUnitId);
       if (!vehicle || !model || !vehicle.assignedOrderIds.length || vehicle.trip) return { ok: false, errorCode: "TRIP_NOT_READY", events };
@@ -122,11 +185,16 @@ export class GameEngine {
 
     if (command.type === "AdvanceTime") {
       this.state.clock.now += command.elapsedGameSeconds;
+      const marketEvent = refreshMarketPeriod(this.state, this.content);
+      if (marketEvent) events.push(marketEvent);
+      this.state.orders.forEach((order) => {
+        if (order.status === "available" && order.deadlineAt <= this.state.clock.now) order.status = "cancelled";
+      });
       for (const vehicle of this.state.vehicleUnits) {
         if (!vehicle.trip || vehicle.trip.arrivesAt > this.state.clock.now) continue;
         const trip = vehicle.trip;
         const loads = assignedLoads(this.state, vehicle);
-        const revenue = loads.reduce((sum, order) => sum + order.rewardCents, 0);
+        const revenue = loads.reduce((sum, order) => sum + (trip.arrivesAt <= order.deadlineAt ? order.rewardCents : Math.round(order.rewardCents * 0.65)), 0);
         const onTime = loads.filter((order) => trip.arrivesAt <= order.deadlineAt).length;
         loads.forEach((order) => { order.status = trip.arrivesAt <= order.deadlineAt ? "delivered" : "failed"; });
         this.state.company.cashCents += revenue - trip.projectedCostCents;
@@ -143,6 +211,12 @@ export class GameEngine {
         this.state.activeRoutes = this.state.activeRoutes.filter((routeId) => routeId !== trip.routeId);
         events.push(event(this.state, "DeliveryCompleted", `完成 ${loads.length} 单运输，净收入已入账`, revenue - trip.projectedCostCents));
       }
+    }
+
+    if (command.type === "SetClock") {
+      this.state.clock.speed = Math.max(0, command.speed);
+      this.state.clock.paused = command.paused;
+      events.push(event(this.state, "ClockChanged", command.paused ? "经营时间已暂停" : "经营时间速度已调整"));
     }
 
     replenishMarket(this.state, this.content);

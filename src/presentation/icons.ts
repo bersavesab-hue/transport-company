@@ -5,7 +5,8 @@ const paths: Record<string, string> = {
   company: '<path d="M4 21V8l8-5 8 5v13M9 21v-6h6v6M8 10h1M15 10h1"/>',
   more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
   box: '<path d="m4 7 8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10"/>',
-  arrow: '<path d="M5 12h14M14 7l5 5-5 5"/>'
+  arrow: '<path d="M5 12h14M14 7l5 5-5 5"/>',
+  news: '<path d="M4 5h16v14H4zM8 9h8M8 13h5"/><path d="M2 8v9a2 2 0 0 0 2 2"/>'
 };
 
 export const icon = (name: string, className = "icon"): string =>

@@ -34,12 +34,14 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
   const cargoTypes = await readJson(resolve(packRoot, manifest.files.cargoTypes));
   const vehicleModels = await readJson(resolve(packRoot, manifest.files.vehicleModels));
   const orders = await readJson(resolve(packRoot, manifest.files.orders));
+  const marketEvents = await readJson(resolve(packRoot, manifest.files.marketEvents));
 
   const cityIds = ensureUniqueIds(cities, "城市");
   const routeIds = ensureUniqueIds(routes, "路线");
   const cargoIds = ensureUniqueIds(cargoTypes, "货物");
   const vehicleIds = ensureUniqueIds(vehicleModels, "车辆型号");
   const orderIds = ensureUniqueIds(orders, "订单");
+  const marketEventIds = ensureUniqueIds(marketEvents, "市场事件");
 
   for (const city of cities) {
     assert(city.contentPackId === manifest.id, `${city.id}: 内容包归属错误`);
@@ -65,7 +67,14 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
     assert(order.deadlineAt > order.availableAt, `${order.id}: 截止时间无效`);
   }
 
-  checkedRecords += cityIds.size + routeIds.size + cargoIds.size + vehicleIds.size + orderIds.size;
+  for (const event of marketEvents) {
+    assert(cityIds.has(event.cityId), `${event.id}: 事件城市不存在`);
+    assert(cargoIds.has(event.cargoId), `${event.id}: 事件货物不存在`);
+    assert(Number.isInteger(event.demandModifierBasisPoints) && event.demandModifierBasisPoints > 0, `${event.id}: 需求增幅无效`);
+    assert(Number.isInteger(event.durationSeconds) && event.durationSeconds > 0, `${event.id}: 持续时间无效`);
+  }
+
+  checkedRecords += cityIds.size + routeIds.size + cargoIds.size + vehicleIds.size + orderIds.size + marketEventIds.size;
   checkedPacks += 1;
 }
 
