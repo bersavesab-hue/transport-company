@@ -12,6 +12,7 @@ describe("extension registries", () => {
   it("keeps asset ids unique with safe fallbacks", () => {
     expect(new Set(ASSET_CATALOG.map((asset) => asset.id)).size).toBe(ASSET_CATALOG.length);
     expect(ASSET_CATALOG.every((asset) => asset.path || asset.fallback)).toBe(true);
+    expect(ASSET_CATALOG.some((asset) => asset.id === contentBundle.mapConfig.assetId)).toBe(true);
   });
 
   it("keeps market events connected to valid cities and cargo", () => {

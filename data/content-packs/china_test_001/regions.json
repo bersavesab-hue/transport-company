@@ -1,0 +1,9 @@
+[
+  {"id":"region_northeast_china_001","name":"东北区域","centerLongitude":125.3,"centerLatitude":44.2,"status":"locked","requiredReputationBasisPoints":7200,"contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"region_north_china_001","name":"华北区域","centerLongitude":116.4,"centerLatitude":39.2,"status":"locked","requiredReputationBasisPoints":6400,"contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"region_east_china_001","name":"华东区域","centerLongitude":120.2,"centerLatitude":31.4,"status":"gateway","requiredReputationBasisPoints":6000,"contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"region_central_china_001","name":"华中区域","centerLongitude":113.4,"centerLatitude":32.1,"status":"active","requiredReputationBasisPoints":0,"contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"region_south_china_001","name":"华南区域","centerLongitude":113.3,"centerLatitude":23.3,"status":"locked","requiredReputationBasisPoints":6800,"contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"region_southwest_china_001","name":"西南区域","centerLongitude":103.8,"centerLatitude":28.8,"status":"locked","requiredReputationBasisPoints":7600,"contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"region_northwest_china_001","name":"西北区域","centerLongitude":97.6,"centerLatitude":38.2,"status":"gateway","requiredReputationBasisPoints":8000,"contentPackId":"content_pack_china_test_001","active":true}
+]

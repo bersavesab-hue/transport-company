@@ -1,15 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { contentBundle } from "../adapters/content.js";
 import { createInitialState, GameEngine } from "../core/domain/game-engine.js";
+import { defaultMapViewport, nationalMapViewport } from "../core/domain/map-projection.js";
 import { renderView, type ViewContext } from "./app-view.js";
 
-const render = (context: ViewContext, prepare?: (engine: GameEngine) => void): string => {
+const render = (context: Omit<ViewContext, "mapViewport"> & { mapViewport?: ViewContext["mapViewport"] }, prepare?: (engine: GameEngine) => void): string => {
   const clock = { innerHTML: "" };
   const main = { innerHTML: "" };
   vi.stubGlobal("document", { querySelector: (selector: string) => selector === "#clock" ? clock : main });
   const engine = new GameEngine(contentBundle, createInitialState(contentBundle));
   prepare?.(engine);
-  renderView(engine.snapshot(), contentBundle, context);
+  renderView(engine.snapshot(), contentBundle, { ...context, mapViewport: context.mapViewport ?? defaultMapViewport(contentBundle.mapConfig) });
   return main.innerHTML;
 };
 
@@ -22,6 +23,14 @@ describe("mobile views", () => {
     expect(html).toContain("城市行情");
     expect(html).toContain("货运指数");
     expect(html).toContain('data-reposition-city="city_zhengzhou_001"');
+  });
+
+  it("renders nationwide locked regions separately from the active regional network", () => {
+    const html = render({ view: "map", selectedCityId: null, selectedVehicleId: null, marketFilter: "all", mapViewport: nationalMapViewport(contentBundle.mapConfig) });
+    expect(html).toContain("全国运输网络");
+    expect(html).toContain("东北区域");
+    expect(html).toContain('data-map-scope="regional"');
+    expect(html).toContain("region-marker locked");
   });
 
   it("shows a profit preview after loading cargo", () => {

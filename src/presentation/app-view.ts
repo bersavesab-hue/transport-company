@@ -1,12 +1,13 @@
 import { GAME_MODULES } from "../config/modules.js";
 import { projectLoadedTrip } from "../core/domain/dispatch-intelligence.js";
 import { getActiveMarketEvent, getCityMarketTone, getMarketIndexBasisPoints } from "../core/domain/market-intelligence.js";
+import { mapViewBox, projectGeoPoint, type MapViewport } from "../core/domain/map-projection.js";
 import type { ContentBundle, GameState, MarketOrder, VehicleUnitState } from "../core/domain/model.js";
 import { dealerDownPaymentCents, estimateVehicleResaleCents, parkingExpansionCostCents } from "../core/domain/vehicle-economy.js";
 import { icon } from "./icons.js";
 
 export type MarketFilter = "all" | "local" | "urgent";
-export interface ViewContext { view: string; selectedCityId: string | null; selectedVehicleId: string | null; marketFilter: MarketFilter; }
+export interface ViewContext { view: string; selectedCityId: string | null; selectedVehicleId: string | null; marketFilter: MarketFilter; mapViewport: MapViewport; }
 
 const money = (cents: number) => new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", maximumFractionDigits: 0 }).format(cents / 100);
 const cityName = (content: ContentBundle, id: string) => content.cities.find((city) => city.id === id)?.name ?? id;
@@ -67,22 +68,40 @@ const cityPanel = (cityId: string, state: Readonly<GameState>, content: ContentB
   </section>`;
 };
 
-const mapView = (state: Readonly<GameState>, content: ContentBundle, selectedCityId: string | null, vehicle: Readonly<VehicleUnitState>): string => {
+const mapView = (state: Readonly<GameState>, content: ContentBundle, context: ViewContext, vehicle: Readonly<VehicleUnitState>): string => {
+  const selectedCityId = context.selectedCityId;
+  const viewBox = mapViewBox(content.mapConfig, context.mapViewport);
   const trip = vehicle.trip;
   const progress = trip ? Math.min(1, Math.max(0, (state.clock.now - trip.startedAt) / (trip.arrivesAt - trip.startedAt))) : 0;
   const from = content.cities.find((city) => city.id === (trip?.fromCityId ?? vehicle.currentCityId));
   const to = content.cities.find((city) => city.id === trip?.toCityId);
-  const truckX = from && to ? from.x + (to.x - from.x) * progress : from?.x ?? 0.43;
-  const truckY = from && to ? from.y + (to.y - from.y) * progress : from?.y ?? 0.54;
+  const fromPoint = from ? projectGeoPoint(content.mapConfig, from.longitude, from.latitude) : { x: 50, y: 32 };
+  const toPoint = to ? projectGeoPoint(content.mapConfig, to.longitude, to.latitude) : fromPoint;
+  const truckX = fromPoint.x + (toPoint.x - fromPoint.x) * progress;
+  const truckY = fromPoint.y + (toPoint.y - fromPoint.y) * progress;
   const roads = content.routes.map((route) => {
     const a = content.cities.find((city) => city.id === route.from)!;
     const b = content.cities.find((city) => city.id === route.to)!;
-    return `<line class="road ${trip?.routeId === route.id ? "active" : ""}" x1="${a.x * 100}" y1="${a.y * 100}" x2="${b.x * 100}" y2="${b.y * 100}"/>`;
+    const pointA = projectGeoPoint(content.mapConfig, a.longitude, a.latitude);
+    const pointB = projectGeoPoint(content.mapConfig, b.longitude, b.latitude);
+    return `<line class="road ${trip?.routeId === route.id ? "active" : ""}" x1="${pointA.x}" y1="${pointA.y}" x2="${pointB.x}" y2="${pointB.y}"/>`;
   }).join("");
-  const cities = content.cities.map((city) => `<g data-city-id="${city.id}" class="city ${city.id === vehicle.currentCityId ? "current" : ""} ${city.id === selectedCityId ? "selected" : ""}" transform="translate(${city.x * 100} ${city.y * 100})"><circle r="2.2"/><text y="-4">${city.name}</text></g>`).join("");
+  const cityRadius = Math.max(0.75, 1.65 / Math.sqrt(context.mapViewport.zoom));
+  const cities = content.cities.map((city) => {
+    const point = projectGeoPoint(content.mapConfig, city.longitude, city.latitude);
+    return `<g data-city-id="${city.id}" class="city ${city.id === vehicle.currentCityId ? "current" : ""} ${city.id === selectedCityId ? "selected" : ""}" transform="translate(${point.x} ${point.y})"><circle style="r:${cityRadius}px"/><text style="font-size:${2.2 / context.mapViewport.zoom}px" y="-${cityRadius + 1.4}">${city.name}</text></g>`;
+  }).join("");
+  const regions = context.mapViewport.zoom <= 1.45 ? content.regions.filter((region) => region.active).map((region) => {
+    const point = projectGeoPoint(content.mapConfig, region.centerLongitude, region.centerLatitude);
+    return `<g class="region-marker ${region.status}" transform="translate(${point.x} ${point.y})"><circle r="4.2"/><text text-anchor="middle" y="0.8">${region.status === "locked" ? "锁" : region.status === "gateway" ? "点" : "开"}</text><text class="region-name" text-anchor="middle" y="7">${region.name}</text></g>`;
+  }).join("") : "";
+  const grid = `${[10,20,30,40,50,60,70,80,90].map((x) => `<line x1="${x}" y1="1" x2="${x}" y2="63"/>`).join("")}${[8,16,24,32,40,48,56].map((y) => `<line x1="1" y1="${y}" x2="99" y2="${y}"/>`).join("")}`;
+  const scopeLabel = context.mapViewport.zoom <= 1.45 ? "全国运输网络" : "区域运输网络";
   return `<section class="map-card">
-    <div class="map-toolbar"><div><span class="eyebrow">华中运输网络</span><h1>把空驶变成利润</h1></div><div class="live-pill"><i></i>${trip ? "运输中" : "待调度"}</div></div>
-    <svg class="network-map" viewBox="0 0 100 100" role="img" aria-label="六城市运输地图"><defs><linearGradient id="land" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1f3850"/><stop offset="1" stop-color="#16283c"/></linearGradient></defs><path class="land" d="M8 16 34 7l22 8 30-3 8 22-9 26 5 21-29 12-25-8-21 4L5 65l7-20z"/>${roads}${cities}<g class="truck-marker" transform="translate(${truckX * 100} ${truckY * 100})"><circle r="4.2"/><text text-anchor="middle" y="1.7">▰</text></g></svg>
+    <div class="map-toolbar"><div><span class="eyebrow">${scopeLabel}</span><h1>把空驶变成利润</h1></div><div class="live-pill"><i></i>${trip ? "运输中" : "待调度"}</div></div>
+    <div class="map-controls"><button data-map-scope="national">全国</button><button data-map-scope="regional">当前区域</button><span></span><button data-map-zoom="out" aria-label="缩小地图">−</button><button data-map-zoom="in" aria-label="放大地图">＋</button></div>
+    ${context.mapViewport.zoom <= 1.45 ? '<div class="map-legend"><span><i class="open"></i>运营区域</span><span><i class="gateway"></i>已接入枢纽</span><span><i></i>待解锁区域</span></div>' : ""}
+    <svg class="network-map" data-map-canvas viewBox="${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}" role="img" aria-label="全国运输网络地图"><defs><linearGradient id="land" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1f3850"/><stop offset="1" stop-color="#16283c"/></linearGradient></defs><rect class="land" x="1" y="1" width="98" height="62" rx="4"/><g class="map-grid">${grid}</g>${regions}${roads}${cities}<g class="truck-marker" transform="translate(${truckX} ${truckY})"><circle r="${1.5 / Math.sqrt(context.mapViewport.zoom)}"/><text style="font-size:${1.7 / context.mapViewport.zoom}px" text-anchor="middle" y="${0.6 / context.mapViewport.zoom}">▰</text></g></svg>
     <div class="trip-strip"><div><span>当前位置</span><strong>${trip ? `${cityName(content, trip.fromCityId)} → ${cityName(content, trip.toCityId)}` : cityName(content, vehicle.currentCityId)}</strong></div><div><span>装载订单</span><strong>${vehicle.assignedOrderIds.length} 单</strong></div><div><span>车辆状态</span><strong>${vehicle.status === "in_transit" ? `${Math.round(progress * 100)}%` : vehicle.status === "loading" ? "装货中" : "空闲"}</strong></div></div>
   </section>${selectedCityId && state.featureFlags.cityIntelligence !== false ? cityPanel(selectedCityId, state, content, vehicle) : ""}`;
 };
@@ -111,7 +130,7 @@ export const renderView = (state: Readonly<GameState>, content: ContentBundle, c
     const returnCount = finalCityId ? state.orders.filter((order) => order.status === "available" && order.originCityId === finalCityId && order.destinationCityId === state.company.headquartersCityId).length : 0;
     const returnHint = finalCityId ? `<div class="return-hint"><div><span class="eyebrow">返程雷达</span><b>${cityName(content, finalCityId)} → ${cityName(content, state.company.headquartersCityId)}</b></div><strong>${returnCount ? `${returnCount} 单可返程` : "暂无直返单"}</strong></div>` : "";
     const vehicleSwitcher = state.vehicleUnits.length > 1 ? `<div class="vehicle-switcher">${state.vehicleUnits.map((unit, index) => `<button data-select-vehicle="${unit.id}" class="${unit.id === vehicle.id ? "active" : ""}">车辆${index + 1}<small>${vehicleStatus(unit)}</small></button>`).join("")}</div>` : "";
-    main.innerHTML = `${marketNews(state, content)}${vehicleSwitcher}${mapView(state, content, context.selectedCityId, vehicle)}<section class="dispatch-card"><div class="section-title"><div><span class="eyebrow">当前调度 · ${vehicleCode(vehicle)}</span><h2>${model.name}</h2></div><span class="condition">车况 ${(vehicle.conditionBasisPoints / 100).toFixed(0)}%</span></div><div class="capacity"><div><span>载重</span><b>${loadWeight} / ${model.capacityKg} kg</b><i><em style="width:${loadWeight / model.capacityKg * 100}%"></em></i></div><div><span>容积</span><b>${(loadVolume / 1000).toFixed(1)} / ${(model.capacityLiters / 1000).toFixed(1)} m³</b><i><em style="width:${loadVolume / model.capacityLiters * 100}%"></em></i></div></div>${manifest}${projectionCard}${returnHint}<div class="dispatch-actions">${state.featureFlags.smartDispatch !== false ? `<button id="smart-load" ${vehicle.status === "in_transit" ? "disabled" : ""}>智能拼货</button>` : ""}<button id="start-trip" class="primary-action" ${!loads.length || vehicle.status === "in_transit" ? "disabled" : ""}>${vehicle.status === "in_transit" ? "多站运输进行中" : loads.length ? projection && projection.stopCityIds.length > 1 ? `开始 ${projection.stopCityIds.length} 站配送` : `发车前往${cityName(content, loads[0].destinationCityId)}` : "先装入订单"}</button></div></section><section class="nearby"><div class="section-title"><div><span class="eyebrow">本地货源</span><h2>${cityName(content, vehicle.currentCityId)}可接订单</h2></div><button data-view-jump="market">全部 ${state.orders.filter((order) => order.status === "available").length}</button></div><div class="order-list">${nearby.length ? nearby.map((order) => orderCard(order, state, content, vehicle)).join("") : '<div class="empty">本地暂无货源，可加速等待行情刷新</div>'}</div></section>`;
+    main.innerHTML = `${marketNews(state, content)}${vehicleSwitcher}${mapView(state, content, context, vehicle)}<section class="dispatch-card"><div class="section-title"><div><span class="eyebrow">当前调度 · ${vehicleCode(vehicle)}</span><h2>${model.name}</h2></div><span class="condition">车况 ${(vehicle.conditionBasisPoints / 100).toFixed(0)}%</span></div><div class="capacity"><div><span>载重</span><b>${loadWeight} / ${model.capacityKg} kg</b><i><em style="width:${loadWeight / model.capacityKg * 100}%"></em></i></div><div><span>容积</span><b>${(loadVolume / 1000).toFixed(1)} / ${(model.capacityLiters / 1000).toFixed(1)} m³</b><i><em style="width:${loadVolume / model.capacityLiters * 100}%"></em></i></div></div>${manifest}${projectionCard}${returnHint}<div class="dispatch-actions">${state.featureFlags.smartDispatch !== false ? `<button id="smart-load" ${vehicle.status === "in_transit" ? "disabled" : ""}>智能拼货</button>` : ""}<button id="start-trip" class="primary-action" ${!loads.length || vehicle.status === "in_transit" ? "disabled" : ""}>${vehicle.status === "in_transit" ? "多站运输进行中" : loads.length ? projection && projection.stopCityIds.length > 1 ? `开始 ${projection.stopCityIds.length} 站配送` : `发车前往${cityName(content, loads[0].destinationCityId)}` : "先装入订单"}</button></div></section><section class="nearby"><div class="section-title"><div><span class="eyebrow">本地货源</span><h2>${cityName(content, vehicle.currentCityId)}可接订单</h2></div><button data-view-jump="market">全部 ${state.orders.filter((order) => order.status === "available").length}</button></div><div class="order-list">${nearby.length ? nearby.map((order) => orderCard(order, state, content, vehicle)).join("") : '<div class="empty">本地暂无货源，可加速等待行情刷新</div>'}</div></section>`;
   } else if (view === "market") {
     const available = state.orders.filter((order) => order.status === "available");
     const filtered = available.filter((order) => context.marketFilter === "local" ? order.originCityId === vehicle.currentCityId : context.marketFilter === "urgent" ? order.deadlineAt - state.clock.now <= 28_800 : true).sort((a, b) => Number(b.originCityId === vehicle.currentCityId) - Number(a.originCityId === vehicle.currentCityId) || b.rewardCents - a.rewardCents);

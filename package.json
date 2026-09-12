@@ -1,12 +1,12 @@
 {
   "name": "transport-company-foundation",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
-    "build:mobile": "tsc --noEmit && vite build --outDir docs/play --sourcemap false",
+    "build:mobile": "tsc --noEmit && vite build --mode mobile --outDir docs/play --sourcemap false",
     "test": "vitest run",
     "validate": "node scripts/validate-content.mjs",
     "check": "npm run validate && npm run test && npm run build"

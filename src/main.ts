@@ -2,12 +2,13 @@ import "./styles.css";
 import { contentBundle } from "./adapters/content.js";
 import { BrowserSaveRepository } from "./adapters/save-repository.js";
 import { GameService } from "./application/game-service.js";
+import { clampMapViewport, defaultMapViewport, mapViewBox, nationalMapViewport } from "./core/domain/map-projection.js";
 import { renderShell, renderView, type ViewContext } from "./presentation/app-view.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 if (!root) throw new Error("App root is missing");
 const service = new GameService(contentBundle, new BrowserSaveRepository());
-const context: ViewContext = { view: "map", selectedCityId: null, selectedVehicleId: service.getState().vehicleUnits[0].id, marketFilter: "all" };
+const context: ViewContext = { view: "map", selectedCityId: null, selectedVehicleId: service.getState().vehicleUnits[0].id, marketFilter: "all", mapViewport: defaultMapViewport(contentBundle.mapConfig) };
 renderShell(root);
 
 const toast = (message: string): void => {
@@ -28,6 +29,10 @@ root.addEventListener("click", (event) => {
   if (nav) return activateView(nav.dataset.view ?? "map");
   const jump = target.closest<HTMLButtonElement>("[data-view-jump]");
   if (jump) return activateView(jump.dataset.viewJump ?? "map");
+  const mapScope = target.closest<HTMLButtonElement>("[data-map-scope]");
+  if (mapScope?.dataset.mapScope) { context.mapViewport = mapScope.dataset.mapScope === "national" ? nationalMapViewport(contentBundle.mapConfig) : defaultMapViewport(contentBundle.mapConfig); renderView(service.getState(), contentBundle, context); return; }
+  const mapZoom = target.closest<HTMLButtonElement>("[data-map-zoom]");
+  if (mapZoom?.dataset.mapZoom) { context.mapViewport = clampMapViewport(contentBundle.mapConfig, { ...context.mapViewport, zoom: context.mapViewport.zoom * (mapZoom.dataset.mapZoom === "in" ? 1.35 : 1 / 1.35) }); renderView(service.getState(), contentBundle, context); return; }
   const city = target.closest<SVGGElement>("[data-city-id]");
   if (city?.dataset.cityId) { context.selectedCityId = city.dataset.cityId; renderView(service.getState(), contentBundle, context); return; }
   if (target.closest("[data-close-city]")) { context.selectedCityId = null; renderView(service.getState(), contentBundle, context); return; }
@@ -57,6 +62,28 @@ root.addEventListener("click", (event) => {
   if (target.closest("#expand-parking")) { const error = service.expandParking(); toast(error ?? "停车场扩建完成，新增 1 个车位"); return; }
   if (target.closest("#reset-game")) { service.reset(); context.selectedVehicleId = service.getState().vehicleUnits[0].id; activateView("map"); toast("测试存档已重置"); }
 });
+
+let mapDrag: { pointerId: number; clientX: number; clientY: number; viewport: ViewContext["mapViewport"]; width: number; height: number } | null = null;
+root.addEventListener("pointerdown", (event) => {
+  const target = event.target as Element;
+  const map = target.closest<SVGSVGElement>("[data-map-canvas]");
+  if (!map || target.closest("[data-city-id]")) return;
+  mapDrag = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, viewport: { ...context.mapViewport }, width: Math.max(1, map.clientWidth), height: Math.max(1, map.clientHeight) };
+  root.setPointerCapture(event.pointerId);
+});
+root.addEventListener("pointermove", (event) => {
+  if (!mapDrag || mapDrag.pointerId !== event.pointerId) return;
+  const box = mapViewBox(contentBundle.mapConfig, mapDrag.viewport);
+  context.mapViewport = clampMapViewport(contentBundle.mapConfig, {
+    ...mapDrag.viewport,
+    centerX: mapDrag.viewport.centerX - (event.clientX - mapDrag.clientX) / mapDrag.width * box.width,
+    centerY: mapDrag.viewport.centerY - (event.clientY - mapDrag.clientY) / mapDrag.height * box.height
+  });
+  renderView(service.getState(), contentBundle, context);
+});
+const endMapDrag = (event: PointerEvent): void => { if (mapDrag?.pointerId === event.pointerId) mapDrag = null; };
+root.addEventListener("pointerup", endMapDrag);
+root.addEventListener("pointercancel", endMapDrag);
 
 service.subscribe((state) => renderView(state, contentBundle, context));
 service.startClock();

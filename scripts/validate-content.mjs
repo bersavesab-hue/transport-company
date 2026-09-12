@@ -29,6 +29,8 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
   assert(idPattern.test(manifest.id), `内容包非法编号: ${manifest.id}`);
   assert(typeof manifest.version === "string", `${manifest.id}: 缺少版本`);
 
+  const mapConfig = await readJson(resolve(packRoot, manifest.files.mapConfig));
+  const regions = await readJson(resolve(packRoot, manifest.files.regions));
   const cities = await readJson(resolve(packRoot, manifest.files.cities));
   const routes = await readJson(resolve(packRoot, manifest.files.routes));
   const cargoTypes = await readJson(resolve(packRoot, manifest.files.cargoTypes));
@@ -37,6 +39,7 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
   const marketEvents = await readJson(resolve(packRoot, manifest.files.marketEvents));
   const customerContracts = await readJson(resolve(packRoot, manifest.files.customerContracts));
 
+  const regionIds = ensureUniqueIds(regions, "区域");
   const cityIds = ensureUniqueIds(cities, "城市");
   const routeIds = ensureUniqueIds(routes, "路线");
   const cargoIds = ensureUniqueIds(cargoTypes, "货物");
@@ -45,9 +48,21 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
   const marketEventIds = ensureUniqueIds(marketEvents, "市场事件");
   const contractIds = ensureUniqueIds(customerContracts, "客户合同");
 
+  assert(mapConfig.minLongitude < mapConfig.maxLongitude && mapConfig.minLatitude < mapConfig.maxLatitude, `${mapConfig.id}: 全国地图边界无效`);
+  assert(mapConfig.minZoom > 0 && mapConfig.defaultZoom >= mapConfig.minZoom && mapConfig.maxZoom >= mapConfig.defaultZoom, `${mapConfig.id}: 地图缩放范围无效`);
+
+  for (const region of regions) {
+    assert(region.contentPackId === manifest.id, `${region.id}: 内容包归属错误`);
+    assert(region.centerLongitude >= mapConfig.minLongitude && region.centerLongitude <= mapConfig.maxLongitude, `${region.id}: 区域经度越界`);
+    assert(region.centerLatitude >= mapConfig.minLatitude && region.centerLatitude <= mapConfig.maxLatitude, `${region.id}: 区域纬度越界`);
+  }
+
   for (const city of cities) {
     assert(city.contentPackId === manifest.id, `${city.id}: 内容包归属错误`);
     assert(city.x >= 0 && city.x <= 1 && city.y >= 0 && city.y <= 1, `${city.id}: 地图坐标越界`);
+    assert(city.longitude >= mapConfig.minLongitude && city.longitude <= mapConfig.maxLongitude, `${city.id}: 全国经度越界`);
+    assert(city.latitude >= mapConfig.minLatitude && city.latitude <= mapConfig.maxLatitude, `${city.id}: 全国纬度越界`);
+    assert(regionIds.has(city.regionId), `${city.id}: 所属区域不存在`);
   }
 
   for (const route of routes) {
@@ -86,7 +101,7 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
     assert(Number.isInteger(contract.milestoneOrders) && contract.milestoneOrders > 0, `${contract.id}: 里程碑无效`);
   }
 
-  checkedRecords += cityIds.size + routeIds.size + cargoIds.size + vehicleIds.size + orderIds.size + marketEventIds.size + contractIds.size;
+  checkedRecords += 1 + regionIds.size + cityIds.size + routeIds.size + cargoIds.size + vehicleIds.size + orderIds.size + marketEventIds.size + contractIds.size;
   checkedPacks += 1;
 }
 
