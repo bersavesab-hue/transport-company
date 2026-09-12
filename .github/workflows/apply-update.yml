@@ -1,1 +1,169 @@
+name: Apply Update ZIP
 
+on:
+  push:
+    branches: [main]
+    paths:
+      - update.zip
+  workflow_dispatch:
+
+concurrency:
+  group: apply-update-main
+  cancel-in-progress: false
+
+jobs:
+  validate-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository safely
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Inspect and extract update package
+        shell: bash
+        run: |
+          python3 <<'PY'
+          import os
+          import shutil
+          import stat
+          import zipfile
+          from pathlib import Path, PurePosixPath
+
+          archive = Path("update.zip")
+          destination = Path(os.environ["RUNNER_TEMP"]) / "update"
+          if not archive.is_file():
+              raise SystemExit("update.zip was not found in the repository root")
+
+          shutil.rmtree(destination, ignore_errors=True)
+          destination.mkdir(parents=True)
+          allowed_roots = {"package.json", "src", "data", "docs", "public", "README.md", "index.html"}
+          roots = set()
+          total_size = 0
+
+          with zipfile.ZipFile(archive) as package:
+              entries = package.infolist()
+              if not entries or len(entries) > 5000:
+                  raise SystemExit("update.zip is empty or contains too many files")
+
+              for entry in entries:
+                  raw_name = entry.filename.replace("\\", "/")
+                  path = PurePosixPath(raw_name)
+                  if path.is_absolute() or ".." in path.parts:
+                      raise SystemExit(f"unsafe path: {raw_name}")
+                  if not path.parts:
+                      continue
+                  if ".git" in path.parts:
+                      raise SystemExit(f"Git metadata is not allowed: {raw_name}")
+                  if len(path.parts) >= 3 and path.parts[:2] == (".github", "workflows"):
+                      raise SystemExit(f"workflow files cannot be replaced by an update package: {raw_name}")
+
+                  file_type = (entry.external_attr >> 16) & 0o170000
+                  if file_type not in (0, stat.S_IFREG, stat.S_IFDIR):
+                      raise SystemExit(f"links and special files are not allowed: {raw_name}")
+
+                  total_size += entry.file_size
+                  if total_size > 250 * 1024 * 1024:
+                      raise SystemExit("update.zip expands beyond the 250 MB safety limit")
+                  roots.add(path.parts[0])
+
+              if not roots.intersection(allowed_roots):
+                  raise SystemExit("project files must be at the ZIP root; remove any outer wrapper folder")
+              package.extractall(destination)
+
+          print(f"Validated {len(entries)} entries ({total_size / 1024 / 1024:.1f} MB expanded)")
+          PY
+
+      - name: Build and test the candidate update
+        shell: bash
+        run: |
+          candidate="$RUNNER_TEMP/candidate"
+          mkdir -p "$candidate"
+          rsync -a --exclude='.git' --exclude='update.zip' ./ "$candidate/"
+          cp -a "$RUNNER_TEMP/update/." "$candidate/"
+          cd "$candidate"
+          if [ -f package.json ] && [ -f package-lock.json ]; then
+            npm ci
+            npm run check
+          fi
+
+  apply-update:
+    needs: validate-update
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Recheck and extract update package
+        shell: bash
+        run: |
+          python3 <<'PY'
+          import os
+          import shutil
+          import stat
+          import zipfile
+          from pathlib import Path, PurePosixPath
+
+          archive = Path("update.zip")
+          destination = Path(os.environ["RUNNER_TEMP"]) / "update"
+          if not archive.is_file():
+              raise SystemExit("update.zip was not found in the repository root")
+
+          shutil.rmtree(destination, ignore_errors=True)
+          destination.mkdir(parents=True)
+          allowed_roots = {"package.json", "src", "data", "docs", "public", "README.md", "index.html"}
+          roots = set()
+          total_size = 0
+
+          with zipfile.ZipFile(archive) as package:
+              entries = package.infolist()
+              if not entries or len(entries) > 5000:
+                  raise SystemExit("update.zip is empty or contains too many files")
+
+              for entry in entries:
+                  raw_name = entry.filename.replace("\\", "/")
+                  path = PurePosixPath(raw_name)
+                  if path.is_absolute() or ".." in path.parts:
+                      raise SystemExit(f"unsafe path: {raw_name}")
+                  if not path.parts:
+                      continue
+                  if ".git" in path.parts:
+                      raise SystemExit(f"Git metadata is not allowed: {raw_name}")
+                  if len(path.parts) >= 3 and path.parts[:2] == (".github", "workflows"):
+                      raise SystemExit(f"workflow files cannot be replaced by an update package: {raw_name}")
+
+                  file_type = (entry.external_attr >> 16) & 0o170000
+                  if file_type not in (0, stat.S_IFREG, stat.S_IFDIR):
+                      raise SystemExit(f"links and special files are not allowed: {raw_name}")
+
+                  total_size += entry.file_size
+                  if total_size > 250 * 1024 * 1024:
+                      raise SystemExit("update.zip expands beyond the 250 MB safety limit")
+                  roots.add(path.parts[0])
+
+              if not roots.intersection(allowed_roots):
+                  raise SystemExit("project files must be at the ZIP root; remove any outer wrapper folder")
+              package.extractall(destination)
+          PY
+
+      - name: Apply, commit, and push
+        shell: bash
+        run: |
+          cp -a "$RUNNER_TEMP/update/." .
+          rm -- update.zip
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No project changes were found."
+            exit 0
+          fi
+          git commit -m "Apply one-click update package"
+          git push
