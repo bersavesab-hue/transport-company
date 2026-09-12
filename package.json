@@ -1,0 +1,12 @@
+{
+  "name": "transport-company-foundation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate": "node scripts/validate-content.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

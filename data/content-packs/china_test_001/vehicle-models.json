@@ -1,0 +1,14 @@
+[
+  {
+    "id": "vehicle_model_light_truck_001",
+    "name": "御风轻运 4.2",
+    "mode": "road_freight",
+    "capacityKg": 1800,
+    "capacityLiters": 16800,
+    "purchasePriceCents": 12680000,
+    "baseConsumption": 1180,
+    "assetId": "vehicle_light_truck_001",
+    "contentPackId": "content_pack_china_test_001",
+    "active": true
+  }
+]

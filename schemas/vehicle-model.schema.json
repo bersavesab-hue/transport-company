@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vehicle-model.schema.json",
+  "title": "VehicleModel",
+  "type": "object",
+  "required": ["id", "name", "mode", "capacityKg", "capacityLiters", "purchasePriceCents", "baseConsumption", "assetId", "contentPackId", "active"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^vehicle_model_[a-z0-9_]+$" },
+    "name": { "type": "string", "minLength": 1 },
+    "mode": { "enum": ["road_freight", "road_passenger", "rail", "shipping", "aviation"] },
+    "capacityKg": { "type": "integer", "minimum": 0 },
+    "capacityLiters": { "type": "integer", "minimum": 0 },
+    "seatCount": { "type": "integer", "minimum": 0 },
+    "purchasePriceCents": { "type": "integer", "minimum": 0 },
+    "baseConsumption": { "type": "integer", "minimum": 0 },
+    "assetId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "contentPackId": { "type": "string" },
+    "active": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

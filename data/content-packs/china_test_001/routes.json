@@ -1,0 +1,11 @@
+[
+  {"id":"route_nanyang_zhengzhou_001","from":"city_nanyang_001","to":"city_zhengzhou_001","mode":"road","distanceMeters":265000,"baseTravelSeconds":13200,"tollCents":11800,"active":true},
+  {"id":"route_nanyang_wuhan_001","from":"city_nanyang_001","to":"city_wuhan_001","mode":"road","distanceMeters":385000,"baseTravelSeconds":19200,"tollCents":17600,"active":true},
+  {"id":"route_nanyang_xian_001","from":"city_nanyang_001","to":"city_xian_001","mode":"road","distanceMeters":435000,"baseTravelSeconds":21000,"tollCents":20300,"active":true},
+  {"id":"route_zhengzhou_xian_001","from":"city_zhengzhou_001","to":"city_xian_001","mode":"road","distanceMeters":480000,"baseTravelSeconds":22800,"tollCents":22400,"active":true},
+  {"id":"route_zhengzhou_hefei_001","from":"city_zhengzhou_001","to":"city_hefei_001","mode":"road","distanceMeters":565000,"baseTravelSeconds":27000,"tollCents":26100,"active":true},
+  {"id":"route_zhengzhou_wuhan_001","from":"city_zhengzhou_001","to":"city_wuhan_001","mode":"road","distanceMeters":510000,"baseTravelSeconds":24600,"tollCents":23800,"active":true},
+  {"id":"route_wuhan_hefei_001","from":"city_wuhan_001","to":"city_hefei_001","mode":"road","distanceMeters":380000,"baseTravelSeconds":18600,"tollCents":17700,"active":true},
+  {"id":"route_wuhan_changsha_001","from":"city_wuhan_001","to":"city_changsha_001","mode":"road","distanceMeters":345000,"baseTravelSeconds":16800,"tollCents":15800,"active":true},
+  {"id":"route_changsha_nanyang_001","from":"city_changsha_001","to":"city_nanyang_001","mode":"road","distanceMeters":650000,"baseTravelSeconds":31200,"tollCents":29900,"active":true}
+]

@@ -1,0 +1,13 @@
+{
+  "id": "content_pack_china_test_001",
+  "version": "0.1.0",
+  "minimumGameVersion": "0.1.0",
+  "dependencies": [],
+  "files": {
+    "cities": "cities.json",
+    "routes": "routes.json",
+    "cargoTypes": "cargo-types.json",
+    "vehicleModels": "vehicle-models.json",
+    "orders": "orders.sample.json"
+  }
+}

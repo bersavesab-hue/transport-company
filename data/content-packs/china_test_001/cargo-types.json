@@ -1,0 +1,8 @@
+[
+  {"id":"cargo_general_001","name":"日用百货","densityKgPerCubicMeter":280,"temperature":"ambient","fragility":20,"hazardClass":"none","contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"cargo_electronics_001","name":"电子设备","densityKgPerCubicMeter":210,"temperature":"ambient","fragility":75,"hazardClass":"none","contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"cargo_furniture_001","name":"家具","densityKgPerCubicMeter":120,"temperature":"ambient","fragility":45,"hazardClass":"none","contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"cargo_fresh_food_001","name":"生鲜食品","densityKgPerCubicMeter":460,"temperature":"chilled","fragility":55,"hazardClass":"none","contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"cargo_auto_parts_001","name":"汽车零部件","densityKgPerCubicMeter":780,"temperature":"ambient","fragility":25,"hazardClass":"none","contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"cargo_express_001","name":"电商快件","densityKgPerCubicMeter":160,"temperature":"ambient","fragility":35,"hazardClass":"none","contentPackId":"content_pack_china_test_001","active":true}
+]

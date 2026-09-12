@@ -1,0 +1,8 @@
+[
+  {"id":"city_nanyang_001","name":"南阳","level":"prefecture","x":0.43,"y":0.54,"modes":["road","rail","aviation"],"industryTags":["agriculture","manufacturing"],"contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"city_zhengzhou_001","name":"郑州","level":"national_hub","x":0.46,"y":0.38,"modes":["road","rail","aviation"],"industryTags":["logistics","manufacturing","commerce"],"contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"city_wuhan_001","name":"武汉","level":"national_hub","x":0.57,"y":0.62,"modes":["road","rail","shipping","aviation"],"industryTags":["manufacturing","commerce","logistics"],"contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"city_xian_001","name":"西安","level":"national_hub","x":0.25,"y":0.37,"modes":["road","rail","aviation"],"industryTags":["manufacturing","technology","tourism"],"contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"city_hefei_001","name":"合肥","level":"national_hub","x":0.72,"y":0.54,"modes":["road","rail","aviation"],"industryTags":["manufacturing","technology"],"contentPackId":"content_pack_china_test_001","active":true},
+  {"id":"city_changsha_001","name":"长沙","level":"national_hub","x":0.49,"y":0.82,"modes":["road","rail","aviation"],"industryTags":["commerce","manufacturing","food"],"contentPackId":"content_pack_china_test_001","active":true}
+]

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "save.schema.json",
+  "title": "GameSaveV1",
+  "type": "object",
+  "required": ["saveVersion", "gameVersion", "createdAt", "updatedAt", "randomSeed", "contentPacks", "featureFlags", "clock", "company", "vehicleUnits", "orders", "activeRoutes", "migrationHistory"],
+  "properties": {
+    "saveVersion": { "const": 1 },
+    "gameVersion": { "type": "string" },
+    "createdAt": { "type": "string" },
+    "updatedAt": { "type": "string" },
+    "randomSeed": { "type": "integer" },
+    "contentPacks": { "type": "array", "items": { "type": "object" } },
+    "featureFlags": { "type": "object" },
+    "clock": { "type": "object" },
+    "company": { "type": "object" },
+    "vehicleUnits": { "type": "array" },
+    "orders": { "type": "array" },
+    "activeRoutes": { "type": "array" },
+    "migrationHistory": { "type": "array" }
+  }
+}

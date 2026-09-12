@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "city.schema.json",
+  "title": "CityNode",
+  "type": "object",
+  "required": ["id", "name", "level", "x", "y", "modes", "industryTags", "contentPackId", "active"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^city_[a-z0-9_]+$" },
+    "name": { "type": "string", "minLength": 1 },
+    "level": { "enum": ["national_hub", "prefecture", "county", "international"] },
+    "x": { "type": "number", "minimum": 0, "maximum": 1 },
+    "y": { "type": "number", "minimum": 0, "maximum": 1 },
+    "modes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["road", "rail", "shipping", "aviation"] }
+    },
+    "industryTags": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+    "contentPackId": { "type": "string" },
+    "active": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

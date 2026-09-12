@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "order.schema.json",
+  "title": "TransportOrder",
+  "type": "object",
+  "required": ["id", "cargoId", "originCityId", "destinationCityId", "weightKg", "volumeLiters", "rewardCents", "availableAt", "deadlineAt", "status"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^order_[a-z0-9_]+$" },
+    "cargoId": { "type": "string", "pattern": "^cargo_[a-z0-9_]+$" },
+    "originCityId": { "type": "string", "pattern": "^city_[a-z0-9_]+$" },
+    "destinationCityId": { "type": "string", "pattern": "^city_[a-z0-9_]+$" },
+    "weightKg": { "type": "integer", "minimum": 1 },
+    "volumeLiters": { "type": "integer", "minimum": 1 },
+    "rewardCents": { "type": "integer", "minimum": 0 },
+    "availableAt": { "type": "integer", "minimum": 0 },
+    "deadlineAt": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["available", "accepted", "in_transit", "delivered", "failed", "cancelled"] }
+  },
+  "additionalProperties": false
+}
