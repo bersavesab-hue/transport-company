@@ -1,55 +1,99 @@
 package com.transportepoch.game;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
-import androidx.annotation.Nullable;
-import androidx.webkit.WebViewAssetLoader;
-import androidx.webkit.WebViewClientCompat;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
 
 public final class MainActivity extends Activity {
+    private static final String APP_HOST = "appassets.androidplatform.net";
+    private static final String HOME_URL = "https://" + APP_HOST + "/assets/index.html";
     private WebView gameView;
 
+    @SuppressLint("SetJavaScriptEnabled")
     @Override
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(Color.rgb(11, 20, 34));
         getWindow().setNavigationBarColor(Color.rgb(11, 20, 34));
 
-        WebViewAssetLoader assets = new WebViewAssetLoader.Builder()
-            .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
-            .build();
-
         gameView = new WebView(this);
         gameView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         gameView.setBackgroundColor(Color.rgb(11, 20, 34));
+        gameView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        gameView.setOnApplyWindowInsetsListener((view, insets) -> {
+            view.setPadding(
+                insets.getSystemWindowInsetLeft(),
+                insets.getSystemWindowInsetTop(),
+                insets.getSystemWindowInsetRight(),
+                insets.getSystemWindowInsetBottom()
+            );
+            return insets;
+        });
+        gameView.requestApplyInsets();
         WebSettings settings = gameView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        gameView.setWebViewClient(new WebViewClientCompat() {
+        gameView.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                return assets.shouldInterceptRequest(request.getUrl());
+                WebResourceResponse local = loadAsset(request.getUrl());
+                return local != null ? local : super.shouldInterceptRequest(view, request);
             }
 
             @Override
             @SuppressWarnings("deprecation")
             public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
-                return assets.shouldInterceptRequest(Uri.parse(url));
+                WebResourceResponse local = loadAsset(Uri.parse(url));
+                return local != null ? local : super.shouldInterceptRequest(view, url);
+            }
+
+            private WebResourceResponse loadAsset(Uri uri) {
+                if (!"https".equalsIgnoreCase(uri.getScheme()) || !APP_HOST.equalsIgnoreCase(uri.getHost())) return null;
+                String path = uri.getPath();
+                if (path == null || !path.startsWith("/assets/")) return emptyResponse();
+                String assetPath = path.substring("/assets/".length());
+                if (assetPath.isEmpty() || assetPath.contains("..") || assetPath.startsWith("/")) return emptyResponse();
+                try {
+                    InputStream input = getAssets().open(assetPath);
+                    String mime = URLConnection.guessContentTypeFromName(assetPath);
+                    if (mime == null) mime = assetPath.endsWith(".js") ? "text/javascript" : assetPath.endsWith(".css") ? "text/css" : assetPath.endsWith(".html") ? "text/html" : "application/octet-stream";
+                    return new WebResourceResponse(mime, "UTF-8", input);
+                } catch (IOException error) {
+                    return emptyResponse();
+                }
+            }
+
+            private WebResourceResponse emptyResponse() {
+                return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("Not found".getBytes(StandardCharsets.UTF_8)));
             }
         });
         setContentView(gameView);
-        gameView.loadUrl("https://appassets.androidplatform.net/assets/index.html");
+        if (savedInstanceState == null) gameView.loadUrl(HOME_URL);
+        else gameView.restoreState(savedInstanceState);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        if (gameView != null) gameView.saveState(outState);
+        super.onSaveInstanceState(outState);
     }
 
     @Override
@@ -60,7 +104,14 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        if (gameView != null) gameView.destroy();
+        if (gameView != null) {
+            gameView.stopLoading();
+            gameView.loadUrl("about:blank");
+            gameView.clearHistory();
+            gameView.removeAllViews();
+            gameView.destroy();
+            gameView = null;
+        }
         super.onDestroy();
     }
 }

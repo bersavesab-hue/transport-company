@@ -13,6 +13,7 @@ import {
 import type { ContentBundle, GameState, VehicleUnitState } from "../core/domain/model.js";
 
 const detailLabels = { national: "全国网络", province: "省域网络", county: "县域网络", local: "城区网络" } as const;
+const nodeLabelPriority: Record<string, number> = { national_hub: 1, province_hub: 2, prefecture_city: 3, county_city: 4, town: 5, logistics_park: 6, warehouse: 7, fuel_station: 8, toll_station: 9, cargo_source: 10 };
 
 const cityPoint = (content: ContentBundle, cityId: string): MapPoint => {
   const node = content.mapNodes.find((item) => item.cityId === cityId);
@@ -54,14 +55,28 @@ export const renderMapStage = (
     return `<polyline class="map-road ${road.roadClass} ${road.routeIds.includes(activeRouteId ?? "") ? "active" : ""}" points="${points}"/>`;
   }).join("");
 
-  const nodeRadius = 1.25 / viewport.zoom;
-  const labelSize = 2 / viewport.zoom;
-  const nodes = visibleNodes.map((node) => {
+  const nodeRadius = 1.05 / viewport.zoom;
+  const labelSize = 2.8 / viewport.zoom;
+  const occupiedLabels: Array<{ x: number; y: number; width: number }> = [];
+  const prioritizedNodes = [...visibleNodes].sort((a, b) => {
+    const aPinned = Number(a.cityId === selectedCityId || a.id === selectedMapNodeId || a.cityId === vehicle.currentCityId);
+    const bPinned = Number(b.cityId === selectedCityId || b.id === selectedMapNodeId || b.cityId === vehicle.currentCityId);
+    return bPinned - aPinned || (nodeLabelPriority[a.kind] ?? 99) - (nodeLabelPriority[b.kind] ?? 99) || a.id.localeCompare(b.id);
+  });
+  const nodes = prioritizedNodes.map((node) => {
     const point = projectGeoPoint(content.mapConfig, node.longitude, node.latitude);
     const cityAttribute = node.cityId ? `data-city-id="${node.cityId}"` : "";
     const selected = node.cityId === selectedCityId || node.id === selectedMapNodeId ? "selected" : "";
     const current = node.cityId === vehicle.currentCityId ? "current" : "";
-    return `<g ${cityAttribute} data-map-node-id="${node.id}" class="map-node ${node.kind} ${selected} ${current}" transform="translate(${point.x} ${point.y})"><circle r="${nodeRadius}"/><text style="font-size:${labelSize}px" y="-${nodeRadius + 0.7}">${node.name}</text></g>`;
+    const screenX = (point.x - box.x) / box.width * 100;
+    const screenY = (point.y - box.y) / box.height * 100;
+    const labelWidth = Math.max(7.5, node.name.length * 2.15);
+    const pinned = Boolean(selected || current);
+    const collides = occupiedLabels.some((label) => Math.abs(label.x - screenX) < (label.width + labelWidth) / 2 && Math.abs(label.y - screenY) < 3.4);
+    const showLabel = pinned || !collides;
+    if (showLabel) occupiedLabels.push({ x: screenX, y: screenY, width: labelWidth });
+    const label = showLabel ? `<text style="font-size:${labelSize}px" y="-${nodeRadius + 0.7}">${node.name}</text>` : "";
+    return `<g ${cityAttribute} data-map-node-id="${node.id}" class="map-node ${node.kind} ${selected} ${current}" transform="translate(${point.x} ${point.y})"><circle r="${nodeRadius}"/>${label}</g>`;
   }).join("");
 
   const clusterMarkers = clusters.map((cluster) => {
@@ -83,7 +98,7 @@ export const renderMapStage = (
     <svg class="network-map" data-map-canvas viewBox="${box.x} ${box.y} ${box.width} ${box.height}" role="img" aria-label="${detailLabels[detail]}">
       <defs><linearGradient id="map-land" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e8e2d4"/><stop offset="1" stop-color="#cfdccf"/></linearGradient></defs>
       <rect class="map-land" x="0" y="0" width="100" height="64"/>${regions}${roads}${nodes}${clusterMarkers}
-      <g class="truck-marker" transform="translate(${truck.x} ${truck.y})"><circle r="${1.15 / viewport.zoom}"/><text style="font-size:${1.45 / viewport.zoom}px" text-anchor="middle" y="${0.45 / viewport.zoom}">▰</text></g>
+      <g class="truck-marker" transform="translate(${truck.x} ${truck.y})"><g transform="scale(${1 / viewport.zoom})"><circle r="1.15"/><rect class="truck-body" x="-0.72" y="-0.42" width="1.05" height="0.72" rx="0.12"/><path class="truck-cab" d="M0.28,-0.28 H0.7 L0.92,0.02 V0.3 H0.28 Z"/><circle class="truck-wheel" cx="-0.42" cy="0.42" r="0.18"/><circle class="truck-wheel" cx="0.58" cy="0.42" r="0.18"/></g></g>
     </svg>
     <div class="map-level"><strong>${detailLabels[detail]}</strong><span>${viewport.zoom.toFixed(1)}×</span></div>
     <div class="map-floating-controls"><button data-map-zoom="in" aria-label="放大地图">＋</button><button data-map-zoom="out" aria-label="缩小地图">−</button><button data-map-scope="national">国</button><button data-map-scope="regional">车</button></div>

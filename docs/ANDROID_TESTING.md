@@ -8,7 +8,7 @@
 
 1. 打开仓库 `Actions`。
 2. 打开最新的 `Build Android APK` 绿色任务。
-3. 在任务底部下载 `transport-epoch-v0.6.0-debug-apk`。
+3. 在任务底部下载 `transport-epoch-v0.6.1-debug-apk`。
 4. 解压下载文件，安装其中的 `app-debug.apk`。
 
 测试包应用名称固定为“运输纪元”，应用包名固定为 `com.transportepoch.game`。测试签名由 Actions 缓存，正常情况下后续测试包可直接覆盖安装并保留存档。若测试签名缓存被 GitHub 清除，安卓会拒绝覆盖安装，此时需要卸载旧测试包后再安装；正式发布版将使用独立且永久保存的正式签名。

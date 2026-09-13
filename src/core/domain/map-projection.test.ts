@@ -23,7 +23,8 @@ describe("national map projection", () => {
 
   it("provides separate regional and national starting views", () => {
     expect(defaultMapViewport(contentBundle.mapConfig).zoom).toBeGreaterThan(1);
-    expect(nationalMapViewport(contentBundle.mapConfig).zoom).toBe(1);
+    expect(nationalMapViewport(contentBundle.mapConfig).zoom).toBeGreaterThan(contentBundle.mapConfig.minZoom);
+    expect(nationalMapViewport(contentBundle.mapConfig).zoom).toBeLessThan(contentBundle.mapConfig.zoomLevels[1].minZoom);
   });
 
   it("switches detail levels and reveals denser node and road layers", () => {

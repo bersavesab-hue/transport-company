@@ -20,11 +20,10 @@ export const defaultMapViewport = (config: NationalMapConfig): MapViewport => {
   return { centerX: center.x, centerY: center.y, zoom: config.defaultZoom };
 };
 
-export const nationalMapViewport = (config: NationalMapConfig): MapViewport => ({
-  centerX: MAP_WIDTH / 2,
-  centerY: MAP_HEIGHT / 2,
-  zoom: config.minZoom
-});
+export const nationalMapViewport = (config: NationalMapConfig): MapViewport => {
+  const center = projectGeoPoint(config, config.initialCenterLongitude, config.initialCenterLatitude);
+  return { centerX: center.x, centerY: center.y, zoom: Math.min(config.maxZoom, Math.max(config.minZoom, 1.6)) };
+};
 
 export const mapViewportAtGeo = (config: NationalMapConfig, longitude: number, latitude: number, zoom = config.defaultZoom): MapViewport => {
   const point = projectGeoPoint(config, longitude, latitude);
