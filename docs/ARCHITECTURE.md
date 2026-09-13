@@ -86,6 +86,7 @@
 - `fleetExpansion`: 开启
 - `multiStopRouting`: 开启
 - `customerContracts`: 开启
+- `scalableMap`: 开启
 - `roadPassenger`: 数据接口开启、正式运营关闭
 - `rail`: 关闭
 - `shipping`: 关闭
@@ -102,3 +103,12 @@
 - 城市标签按缩放级别加载。
 - 市场订单按城市分区生成，不在每帧全量计算。
 - 存档采用稳定编号引用，不复制整份静态内容数据。
+
+## 多级地图边界
+
+- `CityDefinition` 是经营节点，只负责市场、订单、合同和车辆所在地。
+- `MapNodeDefinition` 是显示节点，可独立表示县城、乡镇与物流设施；通过可选 `cityId` 接入经营系统。
+- `MapRoadSegmentDefinition` 保存道路等级和折线形状；通过 `routeIds` 把可视道路映射到经营路线。
+- 全国、省域、县域、城区共用经纬度投影，按 `minZoom` 分级加载。
+- 渲染前先按当前视野筛选节点和道路；未达到显示级别的子节点聚合到可见上级节点。
+- 将来全国数据按地理切片加载时，切片适配器只扩充 `mapNodes` 与 `mapRoadSegments`，不修改经营核心和存档。

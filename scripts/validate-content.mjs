@@ -31,6 +31,8 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
 
   const mapConfig = await readJson(resolve(packRoot, manifest.files.mapConfig));
   const regions = await readJson(resolve(packRoot, manifest.files.regions));
+  const mapNodes = await readJson(resolve(packRoot, manifest.files.mapNodes));
+  const mapRoadSegments = await readJson(resolve(packRoot, manifest.files.mapRoadSegments));
   const cities = await readJson(resolve(packRoot, manifest.files.cities));
   const routes = await readJson(resolve(packRoot, manifest.files.routes));
   const cargoTypes = await readJson(resolve(packRoot, manifest.files.cargoTypes));
@@ -40,6 +42,8 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
   const customerContracts = await readJson(resolve(packRoot, manifest.files.customerContracts));
 
   const regionIds = ensureUniqueIds(regions, "区域");
+  const mapNodeIds = ensureUniqueIds(mapNodes, "地图节点");
+  const mapRoadSegmentIds = ensureUniqueIds(mapRoadSegments, "地图道路");
   const cityIds = ensureUniqueIds(cities, "城市");
   const routeIds = ensureUniqueIds(routes, "路线");
   const cargoIds = ensureUniqueIds(cargoTypes, "货物");
@@ -50,6 +54,12 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
 
   assert(mapConfig.minLongitude < mapConfig.maxLongitude && mapConfig.minLatitude < mapConfig.maxLatitude, `${mapConfig.id}: 全国地图边界无效`);
   assert(mapConfig.minZoom > 0 && mapConfig.defaultZoom >= mapConfig.minZoom && mapConfig.maxZoom >= mapConfig.defaultZoom, `${mapConfig.id}: 地图缩放范围无效`);
+  assert(Array.isArray(mapConfig.zoomLevels) && mapConfig.zoomLevels.length === 4, `${mapConfig.id}: 必须配置四级地图缩放`);
+  assert(mapConfig.zoomLevels.map((level) => level.id).join(",") === "national,province,county,local", `${mapConfig.id}: 地图层级顺序无效`);
+  mapConfig.zoomLevels.forEach((level, index) => {
+    assert(level.minZoom >= mapConfig.minZoom && level.minZoom <= mapConfig.maxZoom, `${mapConfig.id}: ${level.id} 缩放阈值越界`);
+    if (index > 0) assert(level.minZoom > mapConfig.zoomLevels[index - 1].minZoom, `${mapConfig.id}: 地图缩放阈值必须递增`);
+  });
 
   for (const region of regions) {
     assert(region.contentPackId === manifest.id, `${region.id}: 内容包归属错误`);
@@ -63,6 +73,29 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
     assert(city.longitude >= mapConfig.minLongitude && city.longitude <= mapConfig.maxLongitude, `${city.id}: 全国经度越界`);
     assert(city.latitude >= mapConfig.minLatitude && city.latitude <= mapConfig.maxLatitude, `${city.id}: 全国纬度越界`);
     assert(regionIds.has(city.regionId), `${city.id}: 所属区域不存在`);
+  }
+
+  for (const node of mapNodes) {
+    assert(node.contentPackId === manifest.id, `${node.id}: 内容包归属错误`);
+    assert(regionIds.has(node.regionId), `${node.id}: 所属区域不存在`);
+    assert(node.parentId === null || mapNodeIds.has(node.parentId), `${node.id}: 上级地图节点不存在`);
+    assert(node.cityId === null || cityIds.has(node.cityId), `${node.id}: 经营城市不存在`);
+    assert(node.longitude >= mapConfig.minLongitude && node.longitude <= mapConfig.maxLongitude, `${node.id}: 地图经度越界`);
+    assert(node.latitude >= mapConfig.minLatitude && node.latitude <= mapConfig.maxLatitude, `${node.id}: 地图纬度越界`);
+    assert(node.minZoom >= mapConfig.minZoom && node.minZoom <= mapConfig.maxZoom, `${node.id}: 显示缩放级别越界`);
+  }
+
+  for (const segment of mapRoadSegments) {
+    assert(segment.contentPackId === manifest.id, `${segment.id}: 内容包归属错误`);
+    assert(mapNodeIds.has(segment.fromNodeId) && mapNodeIds.has(segment.toNodeId), `${segment.id}: 地图道路端点不存在`);
+    assert(segment.fromNodeId !== segment.toNodeId, `${segment.id}: 地图道路起终点相同`);
+    assert(Array.isArray(segment.geometry) && segment.geometry.length >= 2, `${segment.id}: 道路形状点不足`);
+    assert(Array.isArray(segment.routeIds) && segment.routeIds.every((id) => routeIds.has(id)), `${segment.id}: 经营路线引用无效`);
+    assert(segment.minZoom >= mapConfig.minZoom && segment.minZoom <= mapConfig.maxZoom, `${segment.id}: 显示缩放级别越界`);
+    for (const point of segment.geometry) {
+      assert(point.longitude >= mapConfig.minLongitude && point.longitude <= mapConfig.maxLongitude, `${segment.id}: 道路经度越界`);
+      assert(point.latitude >= mapConfig.minLatitude && point.latitude <= mapConfig.maxLatitude, `${segment.id}: 道路纬度越界`);
+    }
   }
 
   for (const route of routes) {
@@ -101,7 +134,7 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
     assert(Number.isInteger(contract.milestoneOrders) && contract.milestoneOrders > 0, `${contract.id}: 里程碑无效`);
   }
 
-  checkedRecords += 1 + regionIds.size + cityIds.size + routeIds.size + cargoIds.size + vehicleIds.size + orderIds.size + marketEventIds.size + contractIds.size;
+  checkedRecords += 1 + regionIds.size + mapNodeIds.size + mapRoadSegmentIds.size + cityIds.size + routeIds.size + cargoIds.size + vehicleIds.size + orderIds.size + marketEventIds.size + contractIds.size;
   checkedPacks += 1;
 }
 

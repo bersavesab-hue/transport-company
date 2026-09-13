@@ -1,11 +1,13 @@
 {
   "id": "content_pack_china_test_001",
-  "version": "0.3.0",
-  "minimumGameVersion": "0.5.1",
+  "version": "0.4.0",
+  "minimumGameVersion": "0.6.0",
   "dependencies": [],
   "files": {
     "mapConfig": "map-config.json",
     "regions": "regions.json",
+    "mapNodes": "map-nodes.json",
+    "mapRoadSegments": "map-road-segments.json",
     "cities": "cities.json",
     "routes": "routes.json",
     "cargoTypes": "cargo-types.json",

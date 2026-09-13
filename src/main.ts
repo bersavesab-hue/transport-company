@@ -2,13 +2,13 @@ import "./styles.css";
 import { contentBundle } from "./adapters/content.js";
 import { BrowserSaveRepository } from "./adapters/save-repository.js";
 import { GameService } from "./application/game-service.js";
-import { clampMapViewport, defaultMapViewport, mapViewBox, nationalMapViewport } from "./core/domain/map-projection.js";
+import { clampMapViewport, defaultMapViewport, mapViewBox, mapViewportAtGeo, nationalMapViewport } from "./core/domain/map-projection.js";
 import { renderShell, renderView, type ViewContext } from "./presentation/app-view.js";
 
 const root = document.querySelector<HTMLElement>("#app");
 if (!root) throw new Error("App root is missing");
 const service = new GameService(contentBundle, new BrowserSaveRepository());
-const context: ViewContext = { view: "map", selectedCityId: null, selectedVehicleId: service.getState().vehicleUnits[0].id, marketFilter: "all", mapViewport: defaultMapViewport(contentBundle.mapConfig) };
+const context: ViewContext = { view: "map", selectedCityId: null, selectedMapNodeId: null, selectedVehicleId: service.getState().vehicleUnits[0].id, marketFilter: "all", mapViewport: defaultMapViewport(contentBundle.mapConfig), mapDrawerOpen: false };
 renderShell(root);
 
 const toast = (message: string): void => {
@@ -19,6 +19,7 @@ const toast = (message: string): void => {
 const activateView = (view: string): void => {
   context.view = view;
   context.selectedCityId = null;
+  context.selectedMapNodeId = null;
   document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   renderView(service.getState(), contentBundle, context);
 };
@@ -30,12 +31,25 @@ root.addEventListener("click", (event) => {
   const jump = target.closest<HTMLButtonElement>("[data-view-jump]");
   if (jump) return activateView(jump.dataset.viewJump ?? "map");
   const mapScope = target.closest<HTMLButtonElement>("[data-map-scope]");
-  if (mapScope?.dataset.mapScope) { context.mapViewport = mapScope.dataset.mapScope === "national" ? nationalMapViewport(contentBundle.mapConfig) : defaultMapViewport(contentBundle.mapConfig); renderView(service.getState(), contentBundle, context); return; }
+  if (mapScope?.dataset.mapScope) {
+    if (mapScope.dataset.mapScope === "national") context.mapViewport = nationalMapViewport(contentBundle.mapConfig);
+    else {
+      const state = service.getState();
+      const vehicle = state.vehicleUnits.find((item) => item.id === context.selectedVehicleId) ?? state.vehicleUnits[0];
+      const city = contentBundle.cities.find((item) => item.id === (vehicle.trip?.toCityId ?? vehicle.currentCityId));
+      context.mapViewport = city ? mapViewportAtGeo(contentBundle.mapConfig, city.longitude, city.latitude) : defaultMapViewport(contentBundle.mapConfig);
+    }
+    renderView(service.getState(), contentBundle, context); return;
+  }
   const mapZoom = target.closest<HTMLButtonElement>("[data-map-zoom]");
   if (mapZoom?.dataset.mapZoom) { context.mapViewport = clampMapViewport(contentBundle.mapConfig, { ...context.mapViewport, zoom: context.mapViewport.zoom * (mapZoom.dataset.mapZoom === "in" ? 1.35 : 1 / 1.35) }); renderView(service.getState(), contentBundle, context); return; }
+  if (target.closest("[data-map-drawer]")) { context.mapDrawerOpen = !context.mapDrawerOpen; renderView(service.getState(), contentBundle, context); return; }
   const city = target.closest<SVGGElement>("[data-city-id]");
-  if (city?.dataset.cityId) { context.selectedCityId = city.dataset.cityId; renderView(service.getState(), contentBundle, context); return; }
+  if (city?.dataset.cityId) { context.selectedCityId = city.dataset.cityId; context.selectedMapNodeId = null; renderView(service.getState(), contentBundle, context); return; }
+  const mapNode = target.closest<SVGGElement>("[data-map-node-id]");
+  if (mapNode?.dataset.mapNodeId) { context.selectedMapNodeId = mapNode.dataset.mapNodeId; context.selectedCityId = null; renderView(service.getState(), contentBundle, context); return; }
   if (target.closest("[data-close-city]")) { context.selectedCityId = null; renderView(service.getState(), contentBundle, context); return; }
+  if (target.closest("[data-close-map-node]")) { context.selectedMapNodeId = null; renderView(service.getState(), contentBundle, context); return; }
   const filter = target.closest<HTMLButtonElement>("[data-market-filter]");
   if (filter?.dataset.marketFilter) { context.marketFilter = filter.dataset.marketFilter as ViewContext["marketFilter"]; renderView(service.getState(), contentBundle, context); return; }
   const vehicleButton = target.closest<HTMLButtonElement>("[data-select-vehicle]");
@@ -63,28 +77,46 @@ root.addEventListener("click", (event) => {
   if (target.closest("#reset-game")) { service.reset(); context.selectedVehicleId = service.getState().vehicleUnits[0].id; activateView("map"); toast("测试存档已重置"); }
 });
 
-let mapDrag: { pointerId: number; clientX: number; clientY: number; viewport: ViewContext["mapViewport"]; width: number; height: number } | null = null;
+type MapPointer = { clientX: number; clientY: number };
+let mapPointers = new Map<number, MapPointer>();
+let mapGesture: { viewport: ViewContext["mapViewport"]; centerX: number; centerY: number; distance: number; width: number; height: number } | null = null;
+const pointerCenter = (pointers: readonly MapPointer[]): MapPointer => ({ clientX: pointers.reduce((sum, point) => sum + point.clientX, 0) / pointers.length, clientY: pointers.reduce((sum, point) => sum + point.clientY, 0) / pointers.length });
+const pointerDistance = (pointers: readonly MapPointer[]): number => pointers.length < 2 ? 1 : Math.hypot(pointers[1].clientX - pointers[0].clientX, pointers[1].clientY - pointers[0].clientY);
 root.addEventListener("pointerdown", (event) => {
   const target = event.target as Element;
   const map = target.closest<SVGSVGElement>("[data-map-canvas]");
-  if (!map || target.closest("[data-city-id]")) return;
-  mapDrag = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, viewport: { ...context.mapViewport }, width: Math.max(1, map.clientWidth), height: Math.max(1, map.clientHeight) };
+  if (!map || target.closest("[data-map-node-id]")) return;
+  mapPointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+  const points = [...mapPointers.values()];
+  const center = pointerCenter(points);
+  mapGesture = { viewport: { ...context.mapViewport }, centerX: center.clientX, centerY: center.clientY, distance: pointerDistance(points), width: Math.max(1, map.clientWidth), height: Math.max(1, map.clientHeight) };
   root.setPointerCapture(event.pointerId);
 });
 root.addEventListener("pointermove", (event) => {
-  if (!mapDrag || mapDrag.pointerId !== event.pointerId) return;
-  const box = mapViewBox(contentBundle.mapConfig, mapDrag.viewport);
+  if (!mapGesture || !mapPointers.has(event.pointerId)) return;
+  mapPointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+  const points = [...mapPointers.values()];
+  const center = pointerCenter(points);
+  const zoom = points.length > 1 ? mapGesture.viewport.zoom * pointerDistance(points) / mapGesture.distance : mapGesture.viewport.zoom;
+  const box = mapViewBox(contentBundle.mapConfig, { ...mapGesture.viewport, zoom });
   context.mapViewport = clampMapViewport(contentBundle.mapConfig, {
-    ...mapDrag.viewport,
-    centerX: mapDrag.viewport.centerX - (event.clientX - mapDrag.clientX) / mapDrag.width * box.width,
-    centerY: mapDrag.viewport.centerY - (event.clientY - mapDrag.clientY) / mapDrag.height * box.height
+    ...mapGesture.viewport,
+    zoom,
+    centerX: mapGesture.viewport.centerX - (center.clientX - mapGesture.centerX) / mapGesture.width * box.width,
+    centerY: mapGesture.viewport.centerY - (center.clientY - mapGesture.centerY) / mapGesture.height * box.height
   });
   renderView(service.getState(), contentBundle, context);
 });
-const endMapDrag = (event: PointerEvent): void => { if (mapDrag?.pointerId === event.pointerId) mapDrag = null; };
+const endMapDrag = (event: PointerEvent): void => {
+  mapPointers.delete(event.pointerId);
+  const points = [...mapPointers.values()];
+  if (!points.length) { mapGesture = null; return; }
+  const center = pointerCenter(points);
+  mapGesture = { viewport: { ...context.mapViewport }, centerX: center.clientX, centerY: center.clientY, distance: pointerDistance(points), width: mapGesture?.width ?? 1, height: mapGesture?.height ?? 1 };
+};
 root.addEventListener("pointerup", endMapDrag);
 root.addEventListener("pointercancel", endMapDrag);
 
 service.subscribe((state) => renderView(state, contentBundle, context));
 service.startClock();
-if ("serviceWorker" in navigator && import.meta.env.PROD) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js"));
+if ("serviceWorker" in navigator && import.meta.env.PROD) window.addEventListener("load", () => { void navigator.serviceWorker.register("./sw.js").catch(() => undefined); });

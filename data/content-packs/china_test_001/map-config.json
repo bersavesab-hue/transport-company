@@ -9,5 +9,11 @@
   "initialCenterLatitude": 32.2,
   "defaultZoom": 2.6,
   "minZoom": 1.0,
-  "maxZoom": 6.0
+  "maxZoom": 24.0,
+  "zoomLevels": [
+    {"id":"national","label":"全国网络","minZoom":1.0},
+    {"id":"province","label":"省域网络","minZoom":2.2},
+    {"id":"county","label":"县域网络","minZoom":7.0},
+    {"id":"local","label":"城区网络","minZoom":14.0}
+  ]
 }

@@ -7,11 +7,15 @@ import marketEventsSource from "../../data/content-packs/china_test_001/market-e
 import customerContractsSource from "../../data/content-packs/china_test_001/customer-contracts.json";
 import mapConfigSource from "../../data/content-packs/china_test_001/map-config.json";
 import regionsSource from "../../data/content-packs/china_test_001/regions.json";
+import mapNodesSource from "../../data/content-packs/china_test_001/map-nodes.json";
+import mapRoadSegmentsSource from "../../data/content-packs/china_test_001/map-road-segments.json";
 import type { ContentBundle } from "../core/domain/model.js";
 
 export const contentBundle: ContentBundle = {
   mapConfig: mapConfigSource,
   regions: regionsSource,
+  mapNodes: mapNodesSource,
+  mapRoadSegments: mapRoadSegmentsSource,
   cities: citiesSource,
   routes: routesSource,
   cargoTypes: cargoTypesSource,

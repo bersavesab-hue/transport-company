@@ -23,4 +23,12 @@ describe("extension registries", () => {
     expect(contentBundle.customerContracts).toHaveLength(4);
     expect(contentBundle.customerContracts.every((contract) => cityIds.has(contract.originCityId) && cityIds.has(contract.destinationCityId) && cargoIds.has(contract.cargoId))).toBe(true);
   });
+
+  it("keeps visual map nodes and road segments independent from economic routes", () => {
+    const nodeIds = new Set(contentBundle.mapNodes.map((node) => node.id));
+    const routeIds = new Set(contentBundle.routes.map((route) => route.id));
+    expect(contentBundle.mapNodes.length).toBeGreaterThan(contentBundle.cities.length);
+    expect(contentBundle.mapRoadSegments.every((segment) => nodeIds.has(segment.fromNodeId) && nodeIds.has(segment.toNodeId))).toBe(true);
+    expect(contentBundle.mapRoadSegments.flatMap((segment) => segment.routeIds).every((routeId) => routeIds.has(routeId))).toBe(true);
+  });
 });

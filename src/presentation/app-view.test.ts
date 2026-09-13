@@ -4,13 +4,13 @@ import { createInitialState, GameEngine } from "../core/domain/game-engine.js";
 import { defaultMapViewport, nationalMapViewport } from "../core/domain/map-projection.js";
 import { renderView, type ViewContext } from "./app-view.js";
 
-const render = (context: Omit<ViewContext, "mapViewport"> & { mapViewport?: ViewContext["mapViewport"] }, prepare?: (engine: GameEngine) => void): string => {
+const render = (context: Omit<ViewContext, "mapViewport" | "mapDrawerOpen" | "selectedMapNodeId"> & { mapViewport?: ViewContext["mapViewport"]; selectedMapNodeId?: string | null }, prepare?: (engine: GameEngine) => void): string => {
   const clock = { innerHTML: "" };
   const main = { innerHTML: "" };
   vi.stubGlobal("document", { querySelector: (selector: string) => selector === "#clock" ? clock : main });
   const engine = new GameEngine(contentBundle, createInitialState(contentBundle));
   prepare?.(engine);
-  renderView(engine.snapshot(), contentBundle, { ...context, mapViewport: context.mapViewport ?? defaultMapViewport(contentBundle.mapConfig) });
+  renderView(engine.snapshot(), contentBundle, { ...context, selectedMapNodeId: context.selectedMapNodeId ?? null, mapViewport: context.mapViewport ?? defaultMapViewport(contentBundle.mapConfig), mapDrawerOpen: false });
   return main.innerHTML;
 };
 
@@ -27,10 +27,17 @@ describe("mobile views", () => {
 
   it("renders nationwide locked regions separately from the active regional network", () => {
     const html = render({ view: "map", selectedCityId: null, selectedVehicleId: null, marketFilter: "all", mapViewport: nationalMapViewport(contentBundle.mapConfig) });
-    expect(html).toContain("全国运输网络");
+    expect(html).toContain("全国网络");
     expect(html).toContain("东北区域");
     expect(html).toContain('data-map-scope="regional"');
     expect(html).toContain("region-marker locked");
+  });
+
+  it("keeps the management UI inside a collapsed map drawer", () => {
+    const html = render({ view: "map", selectedCityId: null, selectedVehicleId: null, marketFilter: "all" });
+    expect(html).toContain('class="map-bottom-sheet "');
+    expect(html).toContain("上拉调度");
+    expect(html).toContain('data-map-drawer');
   });
 
   it("shows a profit preview after loading cargo", () => {

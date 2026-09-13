@@ -1,4 +1,4 @@
-export const GAME_VERSION = "0.5.1" as const;
+export const GAME_VERSION = "0.6.0" as const;
 export const CURRENT_SAVE_VERSION = 4 as const;
 
 export const INITIAL_FEATURE_FLAGS = {
@@ -9,6 +9,7 @@ export const INITIAL_FEATURE_FLAGS = {
   fleetExpansion: true,
   multiStopRouting: true,
   customerContracts: true,
+  scalableMap: true,
   roadPassenger: false,
   rail: false,
   shipping: false,

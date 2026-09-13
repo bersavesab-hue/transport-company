@@ -18,7 +18,7 @@ export const createInitialState = (content: ContentBundle): GameState => ({
   gameVersion: GAME_VERSION,
   createdAt: new Date(0).toISOString(),
   updatedAt: new Date(0).toISOString(),
-  contentPacks: [{ id: "content_pack_china_test_001", version: "0.3.0" }],
+  contentPacks: [{ id: "content_pack_china_test_001", version: "0.4.0" }],
   featureFlags: { ...INITIAL_FEATURE_FLAGS },
   clock: { now: 8 * 3600, speed: 600, paused: false },
   company: {
@@ -104,7 +104,7 @@ const migrateSaveV3ToV4 = (state: GameState): void => {
   state.featureFlags.customerContracts = true;
   state.customerContracts = state.customerContracts ?? [];
   const chinaPack = state.contentPacks.find((pack) => pack.id === "content_pack_china_test_001");
-  if (chinaPack) chinaPack.version = "0.3.0";
+  if (chinaPack) chinaPack.version = "0.4.0";
   state.vehicleUnits.forEach((unit) => {
     unit.loadedDistanceMeters = unit.loadedDistanceMeters ?? unit.mileageMeters;
     unit.emptyDistanceMeters = unit.emptyDistanceMeters ?? 0;
@@ -123,7 +123,7 @@ const migrateState = (state: GameState, content: ContentBundle): void => {
   if (state.saveVersion < 3 || !state.vehicleMarket) migrateSaveV2ToV3(state, content);
   if (state.saveVersion < 4 || state.vehicleUnits.some((unit) => unit.trip && !unit.trip.routeIds)) migrateSaveV3ToV4(state);
   const chinaPack = state.contentPacks.find((pack) => pack.id === "content_pack_china_test_001");
-  if (chinaPack) chinaPack.version = "0.3.0";
+  if (chinaPack) chinaPack.version = "0.4.0";
   state.nextEventSerial = state.nextEventSerial ?? state.eventLog.length + 1;
   state.saveVersion = CURRENT_SAVE_VERSION;
   state.gameVersion = GAME_VERSION;
