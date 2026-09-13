@@ -11,12 +11,12 @@ export type MarketFilter = "all" | "local" | "urgent";
 export interface ViewContext { view: string; selectedCityId: string | null; selectedMapNodeId: string | null; selectedVehicleId: string | null; marketFilter: MarketFilter; mapViewport: MapViewport; mapDrawerOpen: boolean; }
 
 const money = (cents: number) => new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", maximumFractionDigits: 0 }).format(cents / 100);
-const cityName = (content: ContentBundle, id: string) => content.cities.find((city) => city.id === id)?.name ?? id;
+const cityName = (content: ContentBundle, id: string) => content.mapNodes.find((node) => node.active && node.cityId === id)?.name ?? content.cities.find((city) => city.id === id)?.name ?? id;
 const cargoName = (content: ContentBundle, id: string) => content.cargoTypes.find((cargo) => cargo.id === id)?.name ?? id;
 const gameTime = (seconds: number) => `${String(Math.floor(seconds / 3600) % 24).padStart(2, "0")}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}`;
 const industryNames: Record<string, string> = { agriculture: "农业", manufacturing: "制造业", logistics: "物流", commerce: "商贸", technology: "科技", tourism: "旅游", food: "食品" };
 const vehicleStatus = (vehicle: Readonly<VehicleUnitState>): string => vehicle.status === "idle" ? "空闲" : vehicle.status === "loading" ? "装货中" : "运输中";
-const vehicleCode = (vehicle: Readonly<VehicleUnitState>): string => `豫R·${vehicle.id.slice(-3).toUpperCase().padStart(3, "0")}`;
+const vehicleCode = (vehicle: Readonly<VehicleUnitState>): string => `LY·${vehicle.id.slice(-3).toUpperCase().padStart(3, "0")}`;
 
 const marketNews = (state: Readonly<GameState>, content: ContentBundle): string => {
   if (state.featureFlags.dynamicMarket === false) return "";
@@ -61,10 +61,10 @@ const cityPanel = (cityId: string, state: Readonly<GameState>, content: ContentB
   const incoming = state.orders.filter((order) => order.status === "available" && order.destinationCityId === city.id).length;
   const industries = city.industryTags.map((tag) => industryNames[tag] ?? tag).join(" · ");
   return `<section class="city-panel">
-    <div><span class="eyebrow">城市行情</span><h2>${city.name}<small>${industries}</small></h2></div>
+    <div><span class="eyebrow">城市行情</span><h2>${cityName(content, city.id)}<small>${industries}</small></h2></div>
     <div class="city-market"><strong>${Math.round(index / 100)}</strong><span>货运指数<br><b>${getCityMarketTone(index)}</b></span></div>
     <div class="city-flow"><span>发出货源 <b>${outgoing}</b></span><span>到达需求 <b>${incoming}</b></span></div>
-    ${city.id !== vehicle.currentCityId ? `<button class="reposition-button" data-reposition-city="${city.id}" ${vehicle.status !== "idle" || vehicle.assignedOrderIds.length ? "disabled" : ""}>${vehicle.status !== "idle" || vehicle.assignedOrderIds.length ? "车辆忙碌中" : `空车调往${city.name}`}</button>` : ""}
+    ${city.id !== vehicle.currentCityId ? `<button class="reposition-button" data-reposition-city="${city.id}" ${vehicle.status !== "idle" || vehicle.assignedOrderIds.length ? "disabled" : ""}>${vehicle.status !== "idle" || vehicle.assignedOrderIds.length ? "车辆忙碌中" : `空车调往${cityName(content, city.id)}`}</button>` : ""}
     <button data-close-city aria-label="关闭城市详情">×</button>
   </section>`;
 };
@@ -73,7 +73,7 @@ const mapNodePanel = (nodeId: string, content: ContentBundle): string => {
   const node = content.mapNodes.find((item) => item.id === nodeId);
   if (!node) return "";
   const kindNames: Record<string, string> = { county_city: "县级节点", town: "乡镇节点", logistics_park: "物流园", warehouse: "仓库", fuel_station: "加油站", toll_station: "收费站", cargo_source: "货源点" };
-  return `<section class="map-node-panel"><span class="eyebrow">${kindNames[node.kind] ?? "地图节点"}</span><h2>${node.name}</h2><p>${node.provinceCode.toUpperCase()} · 放大地图可查看周边道路与设施</p><button data-close-map-node aria-label="关闭节点详情">×</button></section>`;
+  return `<section class="map-node-panel"><span class="eyebrow">${kindNames[node.kind] ?? "地图节点"}</span><h2>${node.name}</h2><p>${node.provinceCode.toUpperCase()} · 虚构世界节点，放大地图可查看区域详情</p><button data-close-map-node aria-label="关闭节点详情">×</button></section>`;
 };
 
 const mapView = (state: Readonly<GameState>, content: ContentBundle, context: ViewContext, vehicle: Readonly<VehicleUnitState>): string => {
@@ -158,7 +158,7 @@ export const renderView = (state: Readonly<GameState>, content: ContentBundle, c
     const operatingDistance = loadedDistance + emptyDistance;
     const emptyRate = operatingDistance ? Math.round(emptyDistance / operatingDistance * 100) : 0;
     const expansionCost = parkingExpansionCostCents(state.company.parkingCapacity);
-    main.innerHTML = `<section class="page-head"><span class="eyebrow">经营总览</span><h1>${state.company.name}</h1><p>总部：南阳 · 普通道路货运资质</p></section><div class="metric-grid"><article><span>累计营收</span><strong>${money(state.company.totalRevenueCents)}</strong></article><article><span>累计净利</span><strong>${money(profit)}</strong></article><article><span>完成订单</span><strong>${state.company.deliveredOrders}</strong></article><article><span>准时率</span><strong>${onTime}%</strong></article><article><span>运营里程</span><strong>${(operatingDistance / 1000).toFixed(0)} km</strong></article><article><span>车队空驶率</span><strong>${emptyRate}%</strong></article></div><section class="parking-card"><div><span class="eyebrow">基础设施</span><h2>公司停车场</h2><p>已使用 ${state.vehicleUnits.length} / ${state.company.parkingCapacity} 个车位。提前扩建可为后续车队和司机模块留出空间。</p></div><button id="expand-parking" ${state.company.cashCents < expansionCost ? "disabled" : ""}>扩建 1 个车位 · ${money(expansionCost)}</button></section><section class="event-card"><div class="section-title"><h2>经营动态</h2></div>${state.eventLog.length ? state.eventLog.slice(0, 8).map((item) => `<div class="event-row"><i></i><span>${item.message}</span>${item.amountCents ? `<b>${money(item.amountCents)}</b>` : ""}</div>`).join("") : '<div class="empty">完成第一趟运输后，这里将形成公司历史。</div>'}</section><button id="reset-game" class="danger-link">重新开始测试存档</button>`;
+    main.innerHTML = `<section class="page-head"><span class="eyebrow">经营总览</span><h1>${state.company.name}</h1><p>总部：${cityName(content, state.company.headquartersCityId)} · 普通道路货运资质</p></section><div class="metric-grid"><article><span>累计营收</span><strong>${money(state.company.totalRevenueCents)}</strong></article><article><span>累计净利</span><strong>${money(profit)}</strong></article><article><span>完成订单</span><strong>${state.company.deliveredOrders}</strong></article><article><span>准时率</span><strong>${onTime}%</strong></article><article><span>运营里程</span><strong>${(operatingDistance / 1000).toFixed(0)} km</strong></article><article><span>车队空驶率</span><strong>${emptyRate}%</strong></article></div><section class="parking-card"><div><span class="eyebrow">基础设施</span><h2>公司停车场</h2><p>已使用 ${state.vehicleUnits.length} / ${state.company.parkingCapacity} 个车位。提前扩建可为后续车队和司机模块留出空间。</p></div><button id="expand-parking" ${state.company.cashCents < expansionCost ? "disabled" : ""}>扩建 1 个车位 · ${money(expansionCost)}</button></section><section class="event-card"><div class="section-title"><h2>经营动态</h2></div>${state.eventLog.length ? state.eventLog.slice(0, 8).map((item) => `<div class="event-row"><i></i><span>${item.message}</span>${item.amountCents ? `<b>${money(item.amountCents)}</b>` : ""}</div>`).join("") : '<div class="empty">完成第一趟运输后，这里将形成公司历史。</div>'}</section><button id="reset-game" class="danger-link">重新开始测试存档</button>`;
   } else {
     const modules = GAME_MODULES.filter((module) => module.group !== "primary");
     main.innerHTML = `<section class="page-head"><span class="eyebrow">长期扩展</span><h1>业务中心</h1><p>模块拥有独立入口、功能开关和资源编号，后续更新不会挤占现有页面。</p></section><div class="module-grid">${modules.map((module) => `<article class="${module.status === "active" ? "available" : ""}" ${module.status === "active" ? `data-view-jump="${module.id}"` : ""}><span class="module-icon">${icon(module.icon)}</span><div><b>${module.label}</b><small>${module.status === "active" ? "点击进入" : "接口已预留"}</small></div><em>${module.status === "active" ? "已开放" : "待开放"}</em></article>`).join("")}</div>`;

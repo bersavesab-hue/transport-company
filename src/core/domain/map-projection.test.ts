@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { contentBundle } from "../../adapters/content.js";
-import { clampMapViewport, defaultMapViewport, getMapDetailLevel, getMapNodeClusters, getVisibleMapNodes, getVisibleMapRoadSegments, mapViewBox, nationalMapViewport, pointAlongPolyline, projectGeoPoint } from "./map-projection.js";
+import { clampMapViewport, defaultMapViewport, getMapDetailLevel, getMapNodeClusters, getVisibleMapNodes, getVisibleMapRoadSegments, MAP_HEIGHT, mapViewBox, nationalMapViewport, pointAlongPolyline, projectGeoPoint } from "./map-projection.js";
 
 describe("national map projection", () => {
   it("projects all current cities inside the national canvas", () => {
@@ -9,7 +9,7 @@ describe("national map projection", () => {
       expect(point.x).toBeGreaterThanOrEqual(0);
       expect(point.x).toBeLessThanOrEqual(100);
       expect(point.y).toBeGreaterThanOrEqual(0);
-      expect(point.y).toBeLessThanOrEqual(64);
+      expect(point.y).toBeLessThanOrEqual(MAP_HEIGHT);
     }
   });
 
@@ -18,30 +18,38 @@ describe("national map projection", () => {
     const box = mapViewBox(contentBundle.mapConfig, clamped);
     expect(clamped.zoom).toBe(contentBundle.mapConfig.maxZoom);
     expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.y + box.height).toBeLessThanOrEqual(64);
+    expect(box.y + box.height).toBeLessThanOrEqual(MAP_HEIGHT);
   });
 
-  it("provides separate regional and national starting views", () => {
-    expect(defaultMapViewport(contentBundle.mapConfig).zoom).toBeGreaterThan(1);
-    expect(nationalMapViewport(contentBundle.mapConfig).zoom).toBeGreaterThan(contentBundle.mapConfig.minZoom);
+  it("uses the tall mobile canvas instead of letterboxing dense local maps", () => {
+    const landscape = mapViewBox(contentBundle.mapConfig, { centerX: 63, centerY: 80, zoom: 24, aspectRatio: 1.6 });
+    const portrait = mapViewBox(contentBundle.mapConfig, { centerX: 63, centerY: 80, zoom: 24, aspectRatio: 0.55 });
+    expect(portrait.width).toBeCloseTo(landscape.width);
+    expect(portrait.height).toBeGreaterThan(landscape.height * 2);
+    expect(portrait.width / portrait.height).toBeCloseTo(0.55);
+  });
+
+  it("opens and resets to the complete national network", () => {
+    expect(defaultMapViewport(contentBundle.mapConfig).zoom).toBe(contentBundle.mapConfig.minZoom);
+    expect(nationalMapViewport(contentBundle.mapConfig).zoom).toBe(contentBundle.mapConfig.minZoom);
     expect(nationalMapViewport(contentBundle.mapConfig).zoom).toBeLessThan(contentBundle.mapConfig.zoomLevels[1].minZoom);
   });
 
-  it("switches detail levels and reveals denser node and road layers", () => {
+  it("switches detail levels while keeping roads as an independent later layer", () => {
     expect(getMapDetailLevel(contentBundle.mapConfig, 1)).toBe("national");
     expect(getMapDetailLevel(contentBundle.mapConfig, 3)).toBe("province");
     expect(getMapDetailLevel(contentBundle.mapConfig, 8)).toBe("county");
     expect(getMapDetailLevel(contentBundle.mapConfig, 16)).toBe("local");
     const national = nationalMapViewport(contentBundle.mapConfig);
-    const county = clampMapViewport(contentBundle.mapConfig, { ...defaultMapViewport(contentBundle.mapConfig), zoom: 8 });
-    expect(getVisibleMapNodes(contentBundle.mapConfig, contentBundle.mapNodes, county).length).toBeGreaterThan(getVisibleMapNodes(contentBundle.mapConfig, contentBundle.mapNodes, national).length);
-    expect(getVisibleMapRoadSegments(contentBundle.mapConfig, contentBundle.mapRoadSegments, county).length).toBeGreaterThan(getVisibleMapRoadSegments(contentBundle.mapConfig, contentBundle.mapRoadSegments, national).length);
+    expect(getVisibleMapNodes(contentBundle.mapConfig, contentBundle.mapNodes, national)).toHaveLength(12);
+    expect(contentBundle.mapNodes.filter((node) => node.active && node.minZoom === 2.2)).toHaveLength(30);
+    expect(getVisibleMapRoadSegments(contentBundle.mapConfig, contentBundle.mapRoadSegments, national)).toHaveLength(0);
   });
 
   it("aggregates hidden child nodes under their visible parent", () => {
     const viewport = defaultMapViewport(contentBundle.mapConfig);
     const clusters = getMapNodeClusters(contentBundle.mapConfig, contentBundle.mapNodes, viewport);
-    expect(clusters.find((cluster) => cluster.parentNodeId === "map_node_nanyang_001")?.count).toBeGreaterThan(0);
+    expect(clusters.find((cluster) => cluster.parentNodeId === "map_node_world_heyue_001")?.count).toBeGreaterThan(0);
   });
 
   it("moves vehicles along shaped road geometry", () => {

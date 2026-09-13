@@ -7,11 +7,13 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -31,20 +33,28 @@ public final class MainActivity extends Activity {
         getWindow().setStatusBarColor(Color.rgb(11, 20, 34));
         getWindow().setNavigationBarColor(Color.rgb(11, 20, 34));
 
+        FrameLayout container = new FrameLayout(this);
+        container.setBackgroundColor(Color.rgb(11, 20, 34));
         gameView = new WebView(this);
-        gameView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        FrameLayout.LayoutParams gameLayout = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        gameView.setLayoutParams(gameLayout);
         gameView.setBackgroundColor(Color.rgb(11, 20, 34));
         gameView.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        gameView.setOnApplyWindowInsetsListener((view, insets) -> {
-            view.setPadding(
-                insets.getSystemWindowInsetLeft(),
-                insets.getSystemWindowInsetTop(),
-                insets.getSystemWindowInsetRight(),
-                insets.getSystemWindowInsetBottom()
-            );
-            return insets;
+        container.addView(gameView);
+        container.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            @Override
+            public WindowInsets onApplyWindowInsets(View view, WindowInsets insets) {
+                FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) gameView.getLayoutParams();
+                params.setMargins(
+                    insets.getSystemWindowInsetLeft(),
+                    insets.getSystemWindowInsetTop(),
+                    insets.getSystemWindowInsetRight(),
+                    insets.getSystemWindowInsetBottom()
+                );
+                gameView.setLayoutParams(params);
+                return insets;
+            }
         });
-        gameView.requestApplyInsets();
         WebSettings settings = gameView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -85,7 +95,8 @@ public final class MainActivity extends Activity {
                 return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("Not found".getBytes(StandardCharsets.UTF_8)));
             }
         });
-        setContentView(gameView);
+        setContentView(container);
+        container.requestApplyInsets();
         if (savedInstanceState == null) gameView.loadUrl(HOME_URL);
         else gameView.restoreState(savedInstanceState);
     }

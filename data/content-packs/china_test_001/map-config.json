@@ -1,19 +1,19 @@
 {
-  "id": "map_config_china_national_001",
-  "assetId": "map_china_national_001",
+  "id": "map_config_world_network_001",
+  "assetId": "map_world_terrain_001",
   "minLongitude": 73.5,
   "maxLongitude": 135.1,
   "minLatitude": 18.0,
   "maxLatitude": 53.6,
   "initialCenterLongitude": 112.6,
   "initialCenterLatitude": 32.2,
-  "defaultZoom": 2.6,
+  "defaultZoom": 1.0,
   "minZoom": 1.0,
   "maxZoom": 24.0,
   "zoomLevels": [
-    {"id":"national","label":"全国网络","minZoom":1.0},
-    {"id":"province","label":"省域网络","minZoom":2.2},
-    {"id":"county","label":"县域网络","minZoom":7.0},
+    {"id":"national","label":"全域运输网","minZoom":1.0},
+    {"id":"province","label":"区域网络","minZoom":2.2},
+    {"id":"county","label":"郡县网络","minZoom":7.0},
     {"id":"local","label":"城区网络","minZoom":14.0}
   ]
 }

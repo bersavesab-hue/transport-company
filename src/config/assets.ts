@@ -8,10 +8,13 @@ export interface AssetDefinition {
   status: "fallback" | "final";
 }
 
+const mapBaseTerrainUrl = new URL("../../assets/generated/map-base-terrain-0001.png", import.meta.url).href;
+
 export const ASSET_CATALOG: readonly AssetDefinition[] = [
   { id: "brand_logo_001", path: null, fallback: "route", width: 256, height: 256, category: "brand", status: "fallback" },
   { id: "map_region_central_china_001", path: null, fallback: "map", width: 1600, height: 1200, category: "map", status: "fallback" },
   { id: "map_china_national_001", path: null, fallback: "map", width: 4096, height: 2304, category: "map", status: "fallback" },
+  { id: "map_world_terrain_001", path: mapBaseTerrainUrl, fallback: "map", width: 1536, height: 1024, category: "map", status: "final" },
   { id: "vehicle_light_truck_001", path: null, fallback: "truck", width: 512, height: 256, category: "vehicle", status: "fallback" },
   { id: "vehicle_micro_van_001", path: null, fallback: "truck", width: 512, height: 256, category: "vehicle", status: "fallback" },
   { id: "vehicle_medium_truck_001", path: null, fallback: "truck", width: 512, height: 256, category: "vehicle", status: "fallback" },

@@ -1,10 +1,10 @@
 [
-  {"id":"market_event_zhengzhou_express_001","headline":"郑州电商仓集中补货，快件运价正在上扬","cityId":"city_zhengzhou_001","cargoId":"cargo_express_001","demandModifierBasisPoints":2800,"durationSeconds":21600,"active":true},
-  {"id":"market_event_wuhan_parts_001","headline":"武汉制造企业追加排产，零部件需求升温","cityId":"city_wuhan_001","cargoId":"cargo_auto_parts_001","demandModifierBasisPoints":2400,"durationSeconds":21600,"active":true},
-  {"id":"market_event_changsha_fresh_001","headline":"长沙商超启动生鲜促销，冷藏货源紧俏","cityId":"city_changsha_001","cargoId":"cargo_fresh_food_001","demandModifierBasisPoints":3100,"durationSeconds":21600,"active":true},
-  {"id":"market_event_hefei_electronics_001","headline":"合肥电子产业园赶交订单，高价值货源增加","cityId":"city_hefei_001","cargoId":"cargo_electronics_001","demandModifierBasisPoints":2600,"durationSeconds":21600,"active":true},
-  {"id":"market_event_xian_general_001","headline":"西安批发市场进入采购期，百货调运活跃","cityId":"city_xian_001","cargoId":"cargo_general_001","demandModifierBasisPoints":2200,"durationSeconds":21600,"active":true},
-  {"id":"market_event_nanyang_furniture_001","headline":"南阳家居卖场集中开业，家具运输需求增加","cityId":"city_nanyang_001","cargoId":"cargo_furniture_001","demandModifierBasisPoints":2500,"durationSeconds":21600,"active":true},
-  {"id":"market_event_zhengzhou_parts_001","headline":"郑州汽配渠道补库存，返程零部件订单增多","cityId":"city_zhengzhou_001","cargoId":"cargo_auto_parts_001","demandModifierBasisPoints":2100,"durationSeconds":21600,"active":true},
-  {"id":"market_event_wuhan_express_001","headline":"武汉转运中心出现快件高峰，时效报价提高","cityId":"city_wuhan_001","cargoId":"cargo_express_001","demandModifierBasisPoints":2900,"durationSeconds":21600,"active":true}
+  {"id":"market_event_zhengzhou_express_001","headline":"河岳电商仓集中补货，快件运价正在上扬","cityId":"city_zhengzhou_001","cargoId":"cargo_express_001","demandModifierBasisPoints":2800,"durationSeconds":21600,"active":true},
+  {"id":"market_event_wuhan_parts_001","headline":"云津制造企业追加排产，零部件需求升温","cityId":"city_wuhan_001","cargoId":"cargo_auto_parts_001","demandModifierBasisPoints":2400,"durationSeconds":21600,"active":true},
+  {"id":"market_event_changsha_fresh_001","headline":"星沅商超启动生鲜促销，冷藏货源紧俏","cityId":"city_changsha_001","cargoId":"cargo_fresh_food_001","demandModifierBasisPoints":3100,"durationSeconds":21600,"active":true},
+  {"id":"market_event_hefei_electronics_001","headline":"东澜电子产业园赶交订单，高价值货源增加","cityId":"city_hefei_001","cargoId":"cargo_electronics_001","demandModifierBasisPoints":2600,"durationSeconds":21600,"active":true},
+  {"id":"market_event_xian_general_001","headline":"长岭批发市场进入采购期，百货调运活跃","cityId":"city_xian_001","cargoId":"cargo_general_001","demandModifierBasisPoints":2200,"durationSeconds":21600,"active":true},
+  {"id":"market_event_nanyang_furniture_001","headline":"伏川家居卖场集中开业，家具运输需求增加","cityId":"city_nanyang_001","cargoId":"cargo_furniture_001","demandModifierBasisPoints":2500,"durationSeconds":21600,"active":true},
+  {"id":"market_event_zhengzhou_parts_001","headline":"河岳汽配渠道补库存，返程零部件订单增多","cityId":"city_zhengzhou_001","cargoId":"cargo_auto_parts_001","demandModifierBasisPoints":2100,"durationSeconds":21600,"active":true},
+  {"id":"market_event_wuhan_express_001","headline":"云津转运中心出现快件高峰，时效报价提高","cityId":"city_wuhan_001","cargoId":"cargo_express_001","demandModifierBasisPoints":2900,"durationSeconds":21600,"active":true}
 ]

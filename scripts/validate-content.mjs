@@ -80,8 +80,15 @@ for (const folder of packFolders.filter((entry) => entry.isDirectory())) {
     assert(regionIds.has(node.regionId), `${node.id}: 所属区域不存在`);
     assert(node.parentId === null || mapNodeIds.has(node.parentId), `${node.id}: 上级地图节点不存在`);
     assert(node.cityId === null || cityIds.has(node.cityId), `${node.id}: 经营城市不存在`);
-    assert(node.longitude >= mapConfig.minLongitude && node.longitude <= mapConfig.maxLongitude, `${node.id}: 地图经度越界`);
-    assert(node.latitude >= mapConfig.minLatitude && node.latitude <= mapConfig.maxLatitude, `${node.id}: 地图纬度越界`);
+    const hasMapCoordinates = Number.isFinite(node.mapX) && Number.isFinite(node.mapY);
+    const hasGeoCoordinates = Number.isFinite(node.longitude) && Number.isFinite(node.latitude);
+    assert(hasMapCoordinates || hasGeoCoordinates, `${node.id}: 缺少地图坐标`);
+    if (hasMapCoordinates) {
+      assert(node.mapX >= 0 && node.mapX <= 1 && node.mapY >= 0 && node.mapY <= 1, `${node.id}: 归一化地图坐标越界`);
+    } else {
+      assert(node.longitude >= mapConfig.minLongitude && node.longitude <= mapConfig.maxLongitude, `${node.id}: 地图经度越界`);
+      assert(node.latitude >= mapConfig.minLatitude && node.latitude <= mapConfig.maxLatitude, `${node.id}: 地图纬度越界`);
+    }
     assert(node.minZoom >= mapConfig.minZoom && node.minZoom <= mapConfig.maxZoom, `${node.id}: 显示缩放级别越界`);
   }
 

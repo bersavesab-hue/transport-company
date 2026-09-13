@@ -3,59 +3,70 @@ import {
   getMapNodeClusters,
   getVisibleMapNodes,
   getVisibleMapRoadSegments,
+  MAP_HEIGHT,
   mapViewBox,
   pointAlongPolyline,
   projectGeoPoint,
+  projectMapNode,
   projectRoadGeometry,
   type MapPoint,
   type MapViewport
 } from "../core/domain/map-projection.js";
-import { projectLoadedTrip } from "../core/domain/dispatch-intelligence.js";
-import { findShortestRoadPath } from "../core/domain/route-planning.js";
-import type { ContentBundle, GameState, MapNodeDefinition, VehicleUnitState } from "../core/domain/model.js";
+import type { ContentBundle, GameState, VehicleUnitState } from "../core/domain/model.js";
+import { getAsset } from "../config/assets.js";
 
-const detailLabels = { national: "全国网络", province: "省域网络", county: "县域网络", local: "城区网络" } as const;
+const detailLabels = { national: "全域运输网", province: "区域网络", county: "郡县网络", local: "城区网络" } as const;
 const nodeLabelPriority: Record<string, number> = { national_hub: 1, province_hub: 2, prefecture_city: 3, county_city: 4, town: 5, logistics_park: 6, warehouse: 7, fuel_station: 8, toll_station: 9, cargo_source: 10 };
+const labelLimits = { national: 7, province: 8, county: 10, local: 9 } as const;
+
+interface LabelBox { left: number; right: number; top: number; bottom: number; }
+interface LabelPlacement { offsetX: number; offsetY: number; box: LabelBox; }
+
+const boxesOverlap = (first: LabelBox, second: LabelBox): boolean =>
+  first.left < second.right + 1.7 && first.right + 1.7 > second.left && first.top < second.bottom + 0.8 && first.bottom + 0.8 > second.top;
+
+const findLabelPlacement = (
+  screenX: number,
+  screenY: number,
+  labelWidth: number,
+  occupied: readonly LabelBox[]
+): LabelPlacement | null => {
+  const candidates = [
+    { offsetX: 0, offsetY: -4.2 },
+    { offsetX: 0, offsetY: 4.2 },
+    { offsetX: labelWidth / 2 + 2.2, offsetY: -0.4 },
+    { offsetX: -(labelWidth / 2 + 2.2), offsetY: -0.4 },
+    { offsetX: labelWidth / 2 + 1.6, offsetY: 4.1 },
+    { offsetX: -(labelWidth / 2 + 1.6), offsetY: 4.1 }
+  ];
+  for (const candidate of candidates) {
+    const centerX = screenX + candidate.offsetX;
+    const centerY = screenY + candidate.offsetY;
+    const box = { left: centerX - labelWidth / 2, right: centerX + labelWidth / 2, top: centerY - 1.7, bottom: centerY + 1.7 };
+    if (box.left < 2 || box.right > 98 || box.top < 3 || box.bottom > 97 || occupied.some((item) => boxesOverlap(item, box))) continue;
+    return { ...candidate, box };
+  }
+  return null;
+};
 
 const cityPoint = (content: ContentBundle, cityId: string): MapPoint => {
-  const node = content.mapNodes.find((item) => item.cityId === cityId);
-  if (node) return projectGeoPoint(content.mapConfig, node.longitude, node.latitude);
+  const node = content.mapNodes.find((item) => item.active && item.cityId === cityId) ?? content.mapNodes.find((item) => item.cityId === cityId);
+  if (node) return projectMapNode(content.mapConfig, node);
   const city = content.cities.find((item) => item.id === cityId);
   return city ? projectGeoPoint(content.mapConfig, city.longitude, city.latitude) : { x: 50, y: 32 };
 };
 
 const vehiclePoint = (state: Readonly<GameState>, content: ContentBundle, vehicle: Readonly<VehicleUnitState>): MapPoint => {
   if (!vehicle.trip) return cityPoint(content, vehicle.currentCityId);
-  const duration = Math.max(1, vehicle.trip.arrivesAt - vehicle.trip.startedAt);
-  const progress = Math.min(1, Math.max(0, (state.clock.now - vehicle.trip.startedAt) / duration));
-  const segment = content.mapRoadSegments.find((item) => item.routeIds.includes(vehicle.trip!.routeId));
-  if (!segment) return pointAlongPolyline([cityPoint(content, vehicle.trip.fromCityId), cityPoint(content, vehicle.trip.toCityId)], progress);
+  const progress = Math.min(1, Math.max(0, (state.clock.now - vehicle.trip.startedAt) / (vehicle.trip.arrivesAt - vehicle.trip.startedAt)));
+  const segment = content.mapRoadSegments.find((item) => item.active && item.routeIds.includes(vehicle.trip!.routeId));
+  if (!segment) {
+    return pointAlongPolyline([cityPoint(content, vehicle.trip.fromCityId), cityPoint(content, vehicle.trip.toCityId)], progress);
+  }
   const startNode = content.mapNodes.find((item) => item.id === segment.fromNodeId);
   const points = projectRoadGeometry(content.mapConfig, segment);
   return pointAlongPolyline(startNode?.cityId === vehicle.trip.fromCityId ? points : [...points].reverse(), progress);
 };
-
-type LabelPlacement = { dx: number; dy: number; anchor: "start" | "middle" | "end"; leader: boolean };
-type LabelBox = { x: number; y: number; width: number; height: number };
-
-const labelCandidates = (radius: number): LabelPlacement[] => [
-  { dx: 0, dy: -(radius + 0.75), anchor: "middle", leader: false },
-  { dx: radius + 0.9, dy: -0.15, anchor: "start", leader: true },
-  { dx: -(radius + 0.9), dy: -0.15, anchor: "end", leader: true },
-  { dx: 0, dy: radius + 1.65, anchor: "middle", leader: true }
-];
-
-const toLabelBox = (node: MapNodeDefinition, point: MapPoint, box: ReturnType<typeof mapViewBox>, placement: LabelPlacement): LabelBox => ({
-  x: (point.x + placement.dx - box.x) / box.width * 100,
-  y: (point.y + placement.dy - box.y) / box.height * 100,
-  width: Math.max(6.6, node.name.length * 2.05),
-  height: 3.1
-});
-
-const overlaps = (a: LabelBox, b: LabelBox): boolean =>
-  Math.abs(a.x - b.x) < (a.width + b.width) / 2 && Math.abs(a.y - b.y) < (a.height + b.height) / 2;
-
-const routeIntersects = (routeIds: ReadonlySet<string>, roadRouteIds: readonly string[]): boolean => roadRouteIds.some((routeId) => routeIds.has(routeId));
 
 export const renderMapStage = (
   state: Readonly<GameState>,
@@ -71,87 +82,66 @@ export const renderMapStage = (
   const visibleRoads = getVisibleMapRoadSegments(content.mapConfig, content.mapRoadSegments, viewport);
   const clusters = getMapNodeClusters(content.mapConfig, content.mapNodes, viewport);
   const nodeById = new Map(content.mapNodes.map((node) => [node.id, node]));
+  const activeRouteId = vehicle.trip?.routeId;
+  const mapAsset = getAsset(content.mapConfig.assetId);
 
-  const activeRouteIds = new Set(vehicle.trip?.routeIds ?? []);
-  const plannedRouteIds = new Set(projectLoadedTrip(state, content, vehicle)?.routeIds ?? []);
-  const selectedPath = selectedCityId && selectedCityId !== vehicle.currentCityId ? findShortestRoadPath(content, vehicle.currentCityId, selectedCityId) : null;
-  const selectedRouteIds = new Set(selectedPath?.map((road) => road.id) ?? []);
-
-  const roads = visibleRoads.map((road) => {
+  const renderedRoads = visibleRoads.filter((road) => road.routeIds.includes(activeRouteId ?? "") || detail === "national" || detail === "province" || road.minZoom >= 7);
+  const roads = renderedRoads.map((road) => {
     const points = projectRoadGeometry(content.mapConfig, road).map((point) => `${point.x},${point.y}`).join(" ");
-    const active = routeIntersects(activeRouteIds, road.routeIds);
-    const planned = !active && routeIntersects(plannedRouteIds, road.routeIds);
-    const selected = !active && !planned && routeIntersects(selectedRouteIds, road.routeIds);
-    const stateClass = active ? "route-active" : planned ? "route-planned" : selected ? "route-selected" : "";
-    return `<polyline class="map-road ${road.roadClass} ${stateClass}" points="${points}"/>`;
+    return `<polyline class="map-road ${road.roadClass} ${road.routeIds.includes(activeRouteId ?? "") ? "active" : ""}" points="${points}"/>`;
   }).join("");
 
   const nodeRadius = 1.05 / viewport.zoom;
   const labelSize = 2.8 / viewport.zoom;
   const occupiedLabels: LabelBox[] = [];
+  let visibleLabelCount = 0;
   const prioritizedNodes = [...visibleNodes].sort((a, b) => {
-    const aPinned = Number(a.cityId === selectedCityId || a.id === selectedMapNodeId || a.cityId === vehicle.currentCityId);
-    const bPinned = Number(b.cityId === selectedCityId || b.id === selectedMapNodeId || b.cityId === vehicle.currentCityId);
+    const aPinned = Number((selectedCityId !== null && a.cityId === selectedCityId) || (selectedMapNodeId !== null && a.id === selectedMapNodeId) || a.cityId === vehicle.currentCityId);
+    const bPinned = Number((selectedCityId !== null && b.cityId === selectedCityId) || (selectedMapNodeId !== null && b.id === selectedMapNodeId) || b.cityId === vehicle.currentCityId);
     return bPinned - aPinned || (nodeLabelPriority[a.kind] ?? 99) - (nodeLabelPriority[b.kind] ?? 99) || a.id.localeCompare(b.id);
   });
-
   const nodes = prioritizedNodes.map((node) => {
-    const point = projectGeoPoint(content.mapConfig, node.longitude, node.latitude);
+    const point = projectMapNode(content.mapConfig, node);
     const cityAttribute = node.cityId ? `data-city-id="${node.cityId}"` : "";
-    const isSelected = node.cityId === selectedCityId || node.id === selectedMapNodeId;
-    const isCurrent = node.cityId === vehicle.currentCityId;
-    const pinned = isSelected || isCurrent;
-    let chosen: { placement: LabelPlacement; box: LabelBox } | null = null;
-
-    for (const placement of labelCandidates(nodeRadius)) {
-      const candidateBox = toLabelBox(node, point, box, placement);
-      if (!occupiedLabels.some((occupied) => overlaps(occupied, candidateBox))) {
-        chosen = { placement, box: candidateBox };
-        break;
-      }
+    const selected = (selectedCityId !== null && node.cityId === selectedCityId) || (selectedMapNodeId !== null && node.id === selectedMapNodeId) ? "selected" : "";
+    const current = node.cityId === vehicle.currentCityId ? "current" : "";
+    const screenX = (point.x - box.x) / box.width * 100;
+    const screenY = (point.y - box.y) / box.height * 100;
+    const isFacility = ["logistics_park", "warehouse", "fuel_station", "toll_station", "cargo_source"].includes(node.kind);
+    const labelWidth = Math.max(6.2, node.name.length * (isFacility ? 1.65 : 2.05) + 2);
+    const pinned = Boolean(selected || current);
+    const placement = visibleLabelCount < labelLimits[detail] || pinned ? findLabelPlacement(screenX, screenY, labelWidth, occupiedLabels) : null;
+    const fallbackPlacement = pinned && !placement ? { offsetX: 0, offsetY: -4.2, box: { left: screenX - labelWidth / 2, right: screenX + labelWidth / 2, top: screenY - 5.9, bottom: screenY - 2.5 } } : null;
+    const finalPlacement = placement ?? fallbackPlacement;
+    if (finalPlacement) {
+      occupiedLabels.push(finalPlacement.box);
+      visibleLabelCount += 1;
     }
-
-    if (!chosen && pinned) {
-      const placement = labelCandidates(nodeRadius)[isSelected ? 1 : 0];
-      chosen = { placement, box: toLabelBox(node, point, box, placement) };
-    }
-    if (!chosen && (nodeLabelPriority[node.kind] ?? 99) <= 3) {
-      const placement = labelCandidates(nodeRadius)[0];
-      chosen = { placement, box: toLabelBox(node, point, box, placement) };
-    }
-
-    if (chosen) occupiedLabels.push(chosen.box);
-    const leader = chosen?.placement.leader ? `<line class="map-label-leader" x1="0" y1="0" x2="${chosen.placement.dx}" y2="${chosen.placement.dy}"/>` : "";
-    const label = chosen ? `<text text-anchor="${chosen.placement.anchor}" style="font-size:${labelSize}px" x="${chosen.placement.dx}" y="${chosen.placement.dy}">${node.name}</text>` : "";
-    const classes = ["map-node", node.kind, isSelected ? "selected" : "", isCurrent ? "current" : ""].filter(Boolean).join(" ");
-    return `<g ${cityAttribute} data-map-node-id="${node.id}" class="${classes}" transform="translate(${point.x} ${point.y})"><circle r="${nodeRadius}"/>${leader}${label}</g>`;
+    const labelOffsetX = finalPlacement ? finalPlacement.offsetX / 100 * box.width : 0;
+    const labelOffsetY = finalPlacement ? finalPlacement.offsetY / 100 * box.height : 0;
+    const leader = finalPlacement && (Math.abs(finalPlacement.offsetX) > 0.1 || finalPlacement.offsetY > 0) ? `<line class="map-label-leader" x1="0" y1="0" x2="${labelOffsetX}" y2="${labelOffsetY}"/>` : "";
+    const label = finalPlacement ? `<text class="map-node-label ${isFacility ? "facility-label" : ""}" style="font-size:${labelSize}px" x="${labelOffsetX}" y="${labelOffsetY}" dominant-baseline="middle">${node.name}</text>` : "";
+    return `<g ${cityAttribute} data-map-node-id="${node.id}" class="map-node ${node.kind} ${selected} ${current}" transform="translate(${point.x} ${point.y})"><circle r="${nodeRadius}"/>${leader}${label}</g>`;
   }).join("");
 
   const clusterMarkers = clusters.map((cluster) => {
     const parent = nodeById.get(cluster.parentNodeId);
     if (!parent) return "";
-    const point = projectGeoPoint(content.mapConfig, parent.longitude, parent.latitude);
+    const point = projectMapNode(content.mapConfig, parent);
     return `<g class="map-cluster" transform="translate(${point.x + nodeRadius * 1.3} ${point.y - nodeRadius * 1.3})"><circle r="${nodeRadius * 0.9}"/><text style="font-size:${labelSize * 0.72}px">${cluster.count}</text></g>`;
   }).join("");
 
-  const regions = detail === "national" ? content.regions.filter((region) => region.active).map((region) => {
-    const point = projectGeoPoint(content.mapConfig, region.centerLongitude, region.centerLatitude);
-    return `<g class="region-marker ${region.status}" transform="translate(${point.x} ${point.y})"><circle r="3.2"/><text text-anchor="middle" y="0.6">${region.status === "locked" ? "锁" : region.status === "gateway" ? "点" : "开"}</text><text class="region-name" text-anchor="middle" y="5.4">${region.name}</text></g>`;
-  }).join("") : "";
-
   const truck = vehiclePoint(state, content, vehicle);
-  const duration = Math.max(1, (vehicle.trip?.arrivesAt ?? 1) - (vehicle.trip?.startedAt ?? 0));
-  const progress = vehicle.trip ? Math.min(100, Math.max(0, Math.round((state.clock.now - vehicle.trip.startedAt) / duration * 100))) : 0;
-  const routeState = vehicle.trip ? "运输路线" : plannedRouteIds.size ? "待发路线" : selectedRouteIds.size ? "预览路线" : "道路网络";
+  const progress = vehicle.trip ? Math.min(100, Math.max(0, Math.round((state.clock.now - vehicle.trip.startedAt) / (vehicle.trip.arrivesAt - vehicle.trip.startedAt) * 100))) : 0;
 
   return `<section class="map-stage">
     <svg class="network-map" data-map-canvas viewBox="${box.x} ${box.y} ${box.width} ${box.height}" role="img" aria-label="${detailLabels[detail]}">
       <defs><linearGradient id="map-land" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e8e2d4"/><stop offset="1" stop-color="#cfdccf"/></linearGradient></defs>
-      <rect class="map-land" x="0" y="0" width="100" height="64"/>${regions}${roads}${nodes}${clusterMarkers}
+      <rect class="map-land" x="0" y="0" width="100" height="${MAP_HEIGHT}"/>${mapAsset?.path ? `<image class="map-base-image" href="${mapAsset.path}" x="0" y="0" width="100" height="${MAP_HEIGHT}" preserveAspectRatio="xMidYMid slice"/>` : ""}${roads}${nodes}${clusterMarkers}
       <g class="truck-marker" transform="translate(${truck.x} ${truck.y})"><g transform="scale(${1 / viewport.zoom})"><circle r="1.15"/><rect class="truck-body" x="-0.72" y="-0.42" width="1.05" height="0.72" rx="0.12"/><path class="truck-cab" d="M0.28,-0.28 H0.7 L0.92,0.02 V0.3 H0.28 Z"/><circle class="truck-wheel" cx="-0.42" cy="0.42" r="0.18"/><circle class="truck-wheel" cx="0.58" cy="0.42" r="0.18"/></g></g>
     </svg>
-    <div class="map-level"><strong>${detailLabels[detail]}</strong><span>${viewport.zoom.toFixed(1)}× · ${routeState}</span></div>
-    <div class="map-floating-controls"><button data-map-zoom="in" aria-label="放大地图">＋</button><button data-map-zoom="out" aria-label="缩小地图">−</button><button data-map-scope="national" aria-label="全国视图">国</button><button data-map-scope="regional" aria-label="定位当前车辆">车</button></div>
-    <div class="map-trip-pill"><span>${vehicle.trip ? `${progress}% · 运输中` : plannedRouteIds.size ? "已规划，等待发车" : selectedRouteIds.size ? "正在预览路线" : "车辆待调度"}</span><b>${visibleNodes.length} 节点 · ${visibleRoads.length} 路段</b></div>
+    <div class="map-level"><strong>${detailLabels[detail]}</strong><span>${viewport.zoom.toFixed(1)}×</span></div>
+    <div class="map-floating-controls"><button data-map-zoom="in" aria-label="放大地图">＋</button><button data-map-zoom="out" aria-label="缩小地图">−</button><button data-map-scope="national">国</button><button data-map-scope="regional">车</button></div>
+    <div class="map-trip-pill"><span>${vehicle.trip ? `${progress}% · 运输中` : "车辆待调度"}</span><b>${visibleNodes.length} 节点 · ${renderedRoads.length} 路段</b></div>
   </section>`;
 };

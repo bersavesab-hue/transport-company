@@ -25,12 +25,12 @@ describe("mobile views", () => {
     expect(html).toContain('data-reposition-city="city_zhengzhou_001"');
   });
 
-  it("renders nationwide locked regions separately from the active regional network", () => {
+  it("renders the borderless fictional network over the terrain layer", () => {
     const html = render({ view: "map", selectedCityId: null, selectedVehicleId: null, marketFilter: "all", mapViewport: nationalMapViewport(contentBundle.mapConfig) });
-    expect(html).toContain("全国网络");
-    expect(html).toContain("东北区域");
+    expect(html).toContain("全域运输网");
+    expect(html).toContain("map-base-image");
     expect(html).toContain('data-map-scope="regional"');
-    expect(html).toContain("region-marker locked");
+    expect(html).not.toContain("region-marker");
   });
 
   it("keeps the management UI inside a collapsed map drawer", () => {
@@ -38,6 +38,13 @@ describe("mobile views", () => {
     expect(html).toContain('class="map-bottom-sheet "');
     expect(html).toContain("上拉调度");
     expect(html).toContain('data-map-drawer');
+  });
+
+  it("limits local labels and hides inactive cross-region roads on a phone viewport", () => {
+    const base = defaultMapViewport(contentBundle.mapConfig);
+    const html = render({ view: "map", selectedCityId: null, selectedVehicleId: null, marketFilter: "all", mapViewport: { ...base, zoom: 24, aspectRatio: 0.55 } });
+    expect(html.match(/class="map-node-label/g)?.length ?? 0).toBeLessThanOrEqual(9);
+    expect(html).not.toContain("map-road expressway");
   });
 
   it("shows a profit preview after loading cargo", () => {
@@ -83,7 +90,7 @@ describe("mobile views", () => {
 
   it("renders customer contracts from the content pack", () => {
     const html = render({ view: "contracts", selectedCityId: null, selectedVehicleId: null, marketFilter: "all" });
-    expect(html).toContain("南阳裕丰商贸");
+    expect(html).toContain("伏川裕丰商贸");
     expect(html).toContain("data-sign-contract");
     expect(html).toContain("运价 +8%");
   });

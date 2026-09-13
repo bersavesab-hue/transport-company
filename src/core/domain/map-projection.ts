@@ -1,19 +1,35 @@
 import type { MapDetailLevel, MapNodeDefinition, MapRoadSegmentDefinition, NationalMapConfig } from "./model.js";
 
 export const MAP_WIDTH = 100;
-export const MAP_HEIGHT = 64;
+// Mobile-first world canvas: the nationwide network should occupy a tall phone map,
+// while normalized node coordinates keep content independent from screen pixels.
+export const MAP_HEIGHT = 160;
 
 export interface MapPoint { x: number; y: number; }
-export interface MapViewport { centerX: number; centerY: number; zoom: number; }
+export interface MapViewport { centerX: number; centerY: number; zoom: number; aspectRatio?: number; }
 export interface MapViewBox { x: number; y: number; width: number; height: number; }
 export interface MapNodeCluster { parentNodeId: string; count: number; }
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
+const viewportDimensions = (viewport: MapViewport): { width: number; height: number } => {
+  const width = MAP_WIDTH / viewport.zoom;
+  const defaultAspectRatio = MAP_WIDTH / MAP_HEIGHT;
+  const aspectRatio = clamp(viewport.aspectRatio ?? defaultAspectRatio, 0.45, 2.2);
+  return { width, height: Math.min(MAP_HEIGHT, width / aspectRatio) };
+};
+
 export const projectGeoPoint = (config: NationalMapConfig, longitude: number, latitude: number): MapPoint => ({
   x: (longitude - config.minLongitude) / (config.maxLongitude - config.minLongitude) * MAP_WIDTH,
   y: (config.maxLatitude - latitude) / (config.maxLatitude - config.minLatitude) * MAP_HEIGHT
 });
+
+export const projectMapNode = (config: NationalMapConfig, node: MapNodeDefinition): MapPoint => {
+  if (node.mapX !== undefined && node.mapY !== undefined) {
+    return { x: node.mapX * MAP_WIDTH, y: node.mapY * MAP_HEIGHT };
+  }
+  return projectGeoPoint(config, node.longitude ?? config.initialCenterLongitude, node.latitude ?? config.initialCenterLatitude);
+};
 
 export const defaultMapViewport = (config: NationalMapConfig): MapViewport => {
   const center = projectGeoPoint(config, config.initialCenterLongitude, config.initialCenterLatitude);
@@ -22,7 +38,7 @@ export const defaultMapViewport = (config: NationalMapConfig): MapViewport => {
 
 export const nationalMapViewport = (config: NationalMapConfig): MapViewport => {
   const center = projectGeoPoint(config, config.initialCenterLongitude, config.initialCenterLatitude);
-  return { centerX: center.x, centerY: center.y, zoom: Math.min(config.maxZoom, Math.max(config.minZoom, 1.6)) };
+  return { centerX: center.x, centerY: center.y, zoom: config.minZoom };
 };
 
 export const mapViewportAtGeo = (config: NationalMapConfig, longitude: number, latitude: number, zoom = config.defaultZoom): MapViewport => {
@@ -32,10 +48,11 @@ export const mapViewportAtGeo = (config: NationalMapConfig, longitude: number, l
 
 export const clampMapViewport = (config: NationalMapConfig, viewport: MapViewport): MapViewport => {
   const zoom = clamp(viewport.zoom, config.minZoom, config.maxZoom);
-  const width = MAP_WIDTH / zoom;
-  const height = MAP_HEIGHT / zoom;
+  const normalized = { ...viewport, zoom };
+  const { width, height } = viewportDimensions(normalized);
   return {
     zoom,
+    aspectRatio: viewport.aspectRatio,
     centerX: clamp(viewport.centerX, width / 2, MAP_WIDTH - width / 2),
     centerY: clamp(viewport.centerY, height / 2, MAP_HEIGHT - height / 2)
   };
@@ -43,8 +60,7 @@ export const clampMapViewport = (config: NationalMapConfig, viewport: MapViewpor
 
 export const mapViewBox = (config: NationalMapConfig, viewport: MapViewport): MapViewBox => {
   const clamped = clampMapViewport(config, viewport);
-  const width = MAP_WIDTH / clamped.zoom;
-  const height = MAP_HEIGHT / clamped.zoom;
+  const { width, height } = viewportDimensions(clamped);
   return { x: clamped.centerX - width / 2, y: clamped.centerY - height / 2, width, height };
 };
 
@@ -62,7 +78,7 @@ export const getVisibleMapNodes = (
   viewport: MapViewport
 ): MapNodeDefinition[] => {
   const box = mapViewBox(config, viewport);
-  return nodes.filter((node) => node.active && node.minZoom <= viewport.zoom && pointInsideBox(projectGeoPoint(config, node.longitude, node.latitude), box, 1.5));
+  return nodes.filter((node) => node.active && node.minZoom <= viewport.zoom && pointInsideBox(projectMapNode(config, node), box, 1.5));
 };
 
 export const getMapNodeClusters = (

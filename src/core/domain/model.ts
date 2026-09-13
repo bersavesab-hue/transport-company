@@ -6,7 +6,7 @@ export type MapDetailLevel = "national" | "province" | "county" | "local";
 export interface MapZoomLevelDefinition { id: MapDetailLevel; label: string; minZoom: number; }
 export interface NationalMapConfig { id: EntityId; assetId: EntityId; minLongitude: number; maxLongitude: number; minLatitude: number; maxLatitude: number; initialCenterLongitude: number; initialCenterLatitude: number; defaultZoom: number; minZoom: number; maxZoom: number; zoomLevels: MapZoomLevelDefinition[]; }
 export type MapNodeKind = "national_hub" | "province_hub" | "prefecture_city" | "county_city" | "town" | "logistics_park" | "warehouse" | "fuel_station" | "toll_station" | "cargo_source";
-export interface MapNodeDefinition { id: EntityId; name: string; kind: MapNodeKind; longitude: number; latitude: number; regionId: EntityId; provinceCode: string; parentId: EntityId | null; cityId: EntityId | null; minZoom: number; contentPackId: EntityId; active: boolean; }
+export interface MapNodeDefinition { id: EntityId; name: string; kind: MapNodeKind; mapX?: number; mapY?: number; longitude?: number; latitude?: number; regionId: EntityId; provinceCode: string; parentId: EntityId | null; cityId: EntityId | null; minZoom: number; contentPackId: EntityId; active: boolean; }
 export type MapRoadClass = "expressway" | "national" | "provincial" | "county" | "local";
 export interface GeoCoordinate { longitude: number; latitude: number; }
 export interface MapRoadSegmentDefinition { id: EntityId; name: string; roadClass: MapRoadClass; fromNodeId: EntityId; toNodeId: EntityId; geometry: GeoCoordinate[]; routeIds: EntityId[]; minZoom: number; contentPackId: EntityId; active: boolean; }
